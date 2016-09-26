@@ -2,7 +2,7 @@ module.exports = {
     entry: "./ozenfant.js",
     output: {
         path: __dirname + '/dist',
-        filename: "bundle.js"
+        filename: "ozenfant.js"
     },
     module: {
         loaders: [
