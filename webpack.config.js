@@ -5,8 +5,6 @@ module.exports = {
         filename: "ozenfant.js"
     },
     module: {
-        loaders: [
-            { test: /\.css$/, loader: "style!css" }
-        ]
+        loaders: []
     }
 };

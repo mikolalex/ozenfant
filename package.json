@@ -1,13 +1,7 @@
 {
   "devDependencies": {
-    "babel-loader": "^6.2.5",
-    "babel-preset-es2015": "^6.14.0",
-    "css-loader": "^0.25.0",
     "jquery": "^3.1.1",
-    "mocha": "^3.0.2",
-    "mocha-browser": "^0.2.0",
-    "ooo_oo_o": "^1.0.0",
-    "style-loader": "^0.13.1"
+    "ooo_oo_o": "^1.0.0"
   },
   "name": "ozenfant",
   "version": "1.0.0",
