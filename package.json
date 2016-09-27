@@ -1,8 +1,4 @@
 {
-  "devDependencies": {
-    "jquery": "^3.1.1",
-    "ooo_oo_o": "^1.0.0"
-  },
   "name": "ozenfant",
   "version": "1.0.0",
   "description": "a minimalistic js frontend template engine",
@@ -10,9 +6,12 @@
   "directories": {
     "test": "tests"
   },
-  "dependencies": {},
+  "dependencies": {
+    "ooo_oo_o": "^1.0.0",
+    "jquery": "^3.1.1"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": ""
   },
   "author": "Mykola Oleksiienko",
   "license": "MIT"
