@@ -14,5 +14,8 @@
     "test": ""
   },
   "author": "Mykola Oleksiienko",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "assert": "^1.4.1"
+  }
 }
