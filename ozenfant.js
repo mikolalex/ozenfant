@@ -16,7 +16,8 @@ var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
 }
 
 var Ozenfant = function(str){
-	this.struct = parser(str);
+	this.struct = parser(str + `
+`);
 	this.node_vars_paths = {};
 	this.text_vars_paths = {};
 	this.nodes_vars = {};
