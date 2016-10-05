@@ -177,5 +177,19 @@ describe('Amadee Ozenfant', function () {
 		assert.equal($(".test-if .no_luck").html(), 'Looser!');
 		
 	})
+	
+	it('Testing variables in styles and attrs', function(){
+		var tmpl = `
+		
+		.
+			a(href: $link)
+				"Go"
+		footer(width: $)
+			"Thats all"
+		
+		`;
+		var tmpl = new Ozenfant(tmpl);
+		console.log('tmpl2', tmpl, tmpl.struct.syntax, tmpl.struct.semantics);
+	})
 })
 
