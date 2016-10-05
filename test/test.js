@@ -184,12 +184,22 @@ describe('Amadee Ozenfant', function () {
 		.
 			a(href: $link)
 				"Go"
-		footer(width: $)
+		.somevar$
+		footer(width: $, background-color: green, height: 100px, padding: 10px)
 			"Thats all"
 		
 		`;
 		var tmpl = new Ozenfant(tmpl);
-		console.log('tmpl2', tmpl, tmpl.struct.syntax, tmpl.struct.semantics);
+		//console.log('tmpl2', tmpl, tmpl.struct.syntax, tmpl.struct.semantics);
+		tmpl.render($(".test-attr").get(0), {
+			link: 'www.home.cern',
+			width: '200px',
+			somevar: 42,
+		});
+		tmpl.set('link', 'www.mikolalex.net');
+		tmpl.set('width', '300px');
+		assert.equal($(".test-attr a").attr('href'), 'www.mikolalex.net');
+		assert.equal($(".test-attr footer").css('width'), '300px');
 	})
 })
 

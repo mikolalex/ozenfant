@@ -15,6 +15,11 @@ var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
 	return obj;
 }
 
+var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type'])
+var is_attr = (str) => {
+	return html_attrs.has(str) || str.match(/^data\-/);
+}
+
 var Ozenfant = function(str){
 	this.struct = parser(str + `
 `);
@@ -85,6 +90,16 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 				add_to_if_else_pool(if_else_pools, get_varname(zild), new_path);
 				node_pool[get_varname(zild)] = new_path;
 				//console.log('Found var!', get_varname(node.children[i]), new_path);
+			}else if(zild.attrStyleVars){
+				for(let [varname, attrname] of zild.attrStyleVars){
+					node_pool[varname] = new_path;
+					let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
+					types[varname] = {
+						type: as_type,
+						name: attrname,
+					}
+				}
+				
 			} else if(zild.quoted_str){
 				//console.log('str!', node.children[i].quoted_str);
 				zild.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, (_, key) => {
@@ -102,7 +117,6 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 	}
 }
 
-var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type'])
 var input_types = new Set(['text', 'submit', 'checkbox', 'radio']);
 
 var toHTML = function(node, context, parent_tag){
@@ -125,7 +139,7 @@ var toHTML = function(node, context, parent_tag){
 		if(node.tagname){
 			if(input_types.has(node.tagname)) {
 				node.assignments = node.assignments || [];
-				node.assignments.push('type: ' + node.tagname);
+				node.assignments.push(['type', node.tagname]);
 				tag = 'input';
 			} else {
 				tag = node.tagname;
@@ -155,10 +169,13 @@ var toHTML = function(node, context, parent_tag){
 			if(node.assignments){
 				var styles = [];
 				for(let ass of node.assignments){
-					var assign = ass.split(':');
-					var key = assign[0].trim();
-					var val = assign[1].trim();
-					if(html_attrs.has(key) || key.match(/^data\-/)){
+					var [key, val] = ass;
+					if(val[0] === '$'){
+						// its variable, lets take its val from context
+						var real_key = val.length === 1 ? key : val.substr(1);
+						val = context[real_key] !== undefined ? context[real_key] : '';
+					}
+					if(is_attr(key)){
 						res2.push(' ' + key + '="' + val + '"');
 					} else {
 						styles.push(key + ': ' + val + ';');
@@ -266,14 +283,24 @@ Ozenfant.prototype.set = function(key, val){
 		this._setVarVal(key, new_str);
 		this.bindings[key].textContent = new_str;
 	} else {
-		if(this.var_types[key] && this.var_types[key].type === 'IF'){
-			var struct = val 
-			? this.var_types[key].struct.children 
-			: this.var_types[key].struct.else_children.children;
-			var html = toHTML({children: struct}, this.state);
-			this.bindings[key].innerHTML = html;
-			// @todo should be optimized! update bindings only for dependent vars!
-			this.updateBindings();
+		if(this.var_types[key]){
+			switch(this.var_types[key].type){
+				case 'IF':
+					var struct = val 
+					? this.var_types[key].struct.children 
+					: this.var_types[key].struct.else_children.children;
+					var html = toHTML({children: struct}, this.state);
+					this.bindings[key].innerHTML = html;
+					// @todo should be optimized! update bindings only for dependent vars!
+					this.updateBindings();
+				break;
+				case 'ATTR':
+					this.bindings[key].setAttribute(this.var_types[key].name, val);
+				break;
+				case 'STYLE':
+					this.bindings[key].style[this.var_types[key].name] = val;
+				break;
+			}
 		} else {
 			this._setVarVal(key, val);
 		}

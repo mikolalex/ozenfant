@@ -1,4 +1,17 @@
 var fields = ['classnames', 'tagname', 'str', 'quoted_str'];
+var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
+	for(let i  = 1; ;i = i + 2){
+		var key = arguments[i];
+		var val = arguments[i + 1];
+		if(!key) break;
+
+		if(obj[key] === undefined){
+			obj[key] = val;
+		}
+		obj = obj[key];
+	}
+	return obj;
+}
 module.exports = {
 	empty_chars: [' '],
 	syntax: {
@@ -216,7 +229,15 @@ module.exports = {
 							res.assignments = [];
 							for(let child1 of child.children){
 								if(child1.type === 'assign'){
-									res.assignments.push(child1.chars);
+									var assign = child1.chars.split(':');
+									var key = assign[0].trim();
+									var val = assign[1].trim();
+									if(val[0] === '$'){
+										// its var
+										let varname = val.length === 1 ? key : val.substr(1);
+										init_if_empty(res, 'attrStyleVars', []).push([varname, key]);
+									}
+									res.assignments.push([key, val]);
 								}
 							}
 							//console.log('INDEX', res.level);
