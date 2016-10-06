@@ -61,7 +61,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 					++text_lag;
 			}
 			var new_path = path + '/*[' + (Number(i) + 1 - nodes_lag) + ']';
-			if(zild.type){
+			if(zild.type && (zild.type === 'ELSE' || zild.type === 'IF')){
 				if(zild.type === 'ELSE'){
 					return;
 				}
@@ -86,31 +86,34 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 				} else {
 					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools);
 				}
-			} else if(zild.varname !== undefined){
-				add_to_if_else_pool(if_else_pools, get_varname(zild), new_path);
-				node_pool[get_varname(zild)] = new_path;
-				//console.log('Found var!', get_varname(node.children[i]), new_path);
-			}else if(zild.attrStyleVars){
-				for(let [varname, attrname] of zild.attrStyleVars){
-					node_pool[varname] = new_path;
-					let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
-					types[varname] = {
-						type: as_type,
-						name: attrname,
-					}
-				}
-				
-			} else if(zild.quoted_str){
-				//console.log('str!', node.children[i].quoted_str);
-				zild.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, (_, key) => {
-					var text_path = path + '/text()[' + (Number(i) + 1 - text_lag) + ']';
-					if(!path_pool[text_path]){
-						path_pool[text_path] = zild.quoted_str;
-					}
-					text_pool[key] = text_path;
-					//console.log('text key found', key, text_path);
-				})
 			} else {
+				if(zild.varname !== undefined){
+					add_to_if_else_pool(if_else_pools, get_varname(zild), new_path);
+					node_pool[get_varname(zild)] = new_path;
+					//console.log('Found var!', get_varname(node.children[i]), zild);
+				}
+				if(zild.attrStyleVars){
+					for(let [varname, attrname] of zild.attrStyleVars){
+						node_pool[varname] = new_path;
+						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
+						types[varname] = {
+							type: as_type,
+							name: attrname,
+						}
+					}
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools);
+				} 
+				if(zild.quoted_str){
+					//console.log('str!', node.children[i].quoted_str);
+					zild.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, (_, key) => {
+						var text_path = path + '/text()[' + (Number(i) + 1 - text_lag) + ']';
+						if(!path_pool[text_path]){
+							path_pool[text_path] = zild.quoted_str;
+						}
+						text_pool[key] = text_path;
+						//console.log('text key found', key, text_path);
+					})
+				} 
 				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools);
 			}
 		}

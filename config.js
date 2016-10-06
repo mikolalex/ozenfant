@@ -216,7 +216,6 @@ module.exports = {
 							if(child.children[1]){
 								res.type = "IF";
 							}
-							return res;
 						break;
 						case 'ternary_else':
 							res.type = "ELSE";

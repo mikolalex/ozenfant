@@ -184,8 +184,9 @@ describe('Amadee Ozenfant', function () {
 		.
 			a(href: $link)
 				"Go"
-		.somevar$
+		.foo$(data-name: $bar)
 		footer(width: $, background-color: green, height: 100px, padding: 10px)
+			.somevar$
 			"Thats all"
 		
 		`;
@@ -195,11 +196,17 @@ describe('Amadee Ozenfant', function () {
 			link: 'www.home.cern',
 			width: '200px',
 			somevar: 42,
+			foo: 'llama',
+			bar: 'baz',
 		});
 		tmpl.set('link', 'www.mikolalex.net');
 		tmpl.set('width', '300px');
+		tmpl.set('somevar', '37');
+		assert.equal($(".test-attr .foo").attr('data-name'), 'baz');
 		assert.equal($(".test-attr a").attr('href'), 'www.mikolalex.net');
 		assert.equal($(".test-attr footer").css('width'), '300px');
+		assert.equal($(".test-attr .somevar").html(), '37');
+		assert.equal($(".test-attr .foo").html().trim(), 'llama');
 	})
 })
 
