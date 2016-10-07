@@ -164,17 +164,18 @@ module.exports = {
 				var che_results = parser(struct.children);
 				//console.log('Results', che_results);
 				var max_level = 0;
-				var last_if;
+				var last_if = [];
 				for(let i in che_results){
 					let child = che_results[i];
 					if(!child.tagname && !child.classnames && !child.quoted_str && !child.variable && !child.type) {
 						continue;
 					}
 					if(child.type === 'IF'){
-						last_if = child;
+						last_if.push(child);
 					}
 					if(child.type === 'ELSE'){
-						last_if.else_children = child;
+						var lif = last_if.pop();
+						lif.else_children = child;
 					}
 					var lvl = child.level || 0;
 					if(lvl > max_level){

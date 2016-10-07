@@ -15,7 +15,7 @@ var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
 	return obj;
 }
 
-var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type'])
+var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type', 'value'])
 var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
 }
@@ -49,6 +49,7 @@ var add_to_if_else_pool = (pools, varname, path) => {
 }
 
 var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pools) => {
+	if(node === undefined) debugger;
 	if(node.children){
 		var nodes_lag = 0;
 		var text_lag = 0;
@@ -239,9 +240,24 @@ Ozenfant.prototype.getIfElseVarsIndex = function(){
 Ozenfant.prototype.updateBindings = function(){
 	this.bindings = {};
 	for(let varname in this.node_vars_paths){
+		if(this.if_else_vars[varname]){
+			var breaker = false;
+			for(let vn in this.if_else_vars[varname]){
+				var expected_val = this.if_else_vars[varname][vn];
+				var real_val = this.state[vn];
+				// XOR
+				if(!((expected_val && real_val) || !(expected_val || real_val))){
+					breaker = true;
+					break;
+				}
+			}
+			if(breaker) { 
+				continue;
+			}
+		}
 		this.bindings[varname] = this.searchByPath(this.node_vars_paths[varname]);
 		if(!this.bindings[varname]){
-			console.warn('No node found for path:', this.node_vars_paths[varname], 'in context', this.root);
+			console.warn('No node found for var', varname, 'in path:', this.node_vars_paths[varname], 'in context', this.root, ', context', this.state);
 		}
 	}
 	for(let varname in this.text_vars_paths){

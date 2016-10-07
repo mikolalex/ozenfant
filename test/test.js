@@ -159,7 +159,7 @@ describe('Amadee Ozenfant', function () {
 		var ctx = {logged_in: true, username: 'Mikolalex', no_luck: 'Looser!'};
 		var tmpl = new Ozenfant(tmpl);
 		tmpl.render($(".test-if").get(0), ctx);
-		//console.log('tmpl', tmpl, tmpl.struct.syntax, tmpl.struct.semantics);
+		//console.log('tmpl', tmpl.if_else_vars);
 		
 		
 		tmpl.set('logged_in', false);
@@ -190,7 +190,7 @@ describe('Amadee Ozenfant', function () {
 			"Thats all"
 		
 		`;
-		var tmpl = new Ozenfant(tmpl);
+		tmpl = new Ozenfant(tmpl);
 		//console.log('tmpl2', tmpl, tmpl.struct.syntax, tmpl.struct.semantics);
 		tmpl.render($(".test-attr").get(0), {
 			link: 'www.home.cern',
@@ -207,6 +207,31 @@ describe('Amadee Ozenfant', function () {
 		assert.equal($(".test-attr footer").css('width'), '300px');
 		assert.equal($(".test-attr .somevar").html(), '37');
 		assert.equal($(".test-attr .foo").html().trim(), 'llama');
+	})
+	
+	it('testing nested if/else', () => {
+		var tmpl = `
+			.$isObj?
+					.
+							"OBJ"
+					.$isOpened?
+							a.close
+									"close"
+					:
+							a.open
+									"Open"
+			:
+					.
+							"Scalar"
+					.val$
+		`;
+		tmpl = new Ozenfant(tmpl, {
+			isObj: true
+		});
+		tmpl.render($(".test-nested-if").get(0), {
+			isObj: true
+		});
+		//console.log('RES', tmpl.toHTML());
 	})
 })
 
