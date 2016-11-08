@@ -273,6 +273,15 @@ Ozenfant.prototype.render = function(node, context){
 	node.innerHTML = this.toHTML(this.state);
 	this.updateBindings();
 }
+Ozenfant.prototype.getHTML = function(node, context = false){
+	if(context) { 
+		this.state = context;
+	}
+	return this.toHTML(this.state);
+}
+Ozenfant.prototype.setRoot = function(node){
+	this.root = node;
+}
 Ozenfant.prototype._setVarVal = function(key, val){
 	if(this.if_else_vars[key]){
 		//console.log('ifelsevar', key, this.if_else_vars[key]);

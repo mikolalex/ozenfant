@@ -1,6 +1,6 @@
 {
   "name": "ozenfant",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "a minimalistic js frontend template engine",
   "main": "ozenfant.js",
   "directories": {
