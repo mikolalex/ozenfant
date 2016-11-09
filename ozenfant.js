@@ -21,15 +21,27 @@ var is_attr = (str) => {
 }
 
 var Ozenfant = function(str){
-	this.struct = parser(str + `
+	if(str instanceof Object){
+		this.struct = str;// compiled struct
+	} else {
+		this.struct = parser(str + `
 `);
+	}
 	this.node_vars_paths = {};
 	this.text_vars_paths = {};
 	this.nodes_vars = {};
 	this.var_types = {};
+	this.state = {};
+	this.bindings = {};
 	get_vars({children: this.struct.semantics}, this.node_vars_paths, this.text_vars_paths, this.nodes_vars, '.', this.var_types, []);
 	this.getIfElseVarsIndex();
 };
+
+Ozenfant.prepare = (str) => {
+	return parser(str + `
+`);
+}
+
 var get_varname = (node) => {
 	var key = node.varname;
 	if(!key.length){
@@ -273,7 +285,7 @@ Ozenfant.prototype.render = function(node, context){
 	node.innerHTML = this.toHTML(this.state);
 	this.updateBindings();
 }
-Ozenfant.prototype.getHTML = function(node, context = false){
+Ozenfant.prototype.getHTML = function(context = false){
 	if(context) { 
 		this.state = context;
 	}
