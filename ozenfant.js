@@ -38,8 +38,11 @@ var Ozenfant = function(str){
 };
 
 Ozenfant.prepare = (str) => {
-	return parser(str + `
+	var struct = parser(str + `
 `);
+	var func_body = " return '" + toFunc({children: struct.semantics}) + "';";
+	struct.func = new Function('ctx', func_body);
+	return struct;
 }
 
 var get_varname = (node) => {
@@ -138,6 +141,7 @@ var input_types = new Set(['text', 'submit', 'checkbox', 'radio']);
 var toHTML = function(node, context, parent_tag){
 	var indent = `
 ` + new Array(node.level).join('	');
+	//indent = '';// !
 	var res1 = [], res2 = [], after = '';
 	if(node.type === 'ELSE'){
 		return '';
@@ -226,9 +230,127 @@ var toHTML = function(node, context, parent_tag){
 	return res1.join(' ');
 }
 
+var getvar = (key) => {
+	return "' + (ctx." + key + " || '') + '";
+}
+
+var toFunc = function(node, parent_tag){
+	var indent = ` ' + 
+'` + new Array(node.level).join('	');
+	//indent = '';// !
+	var res1 = [], res2 = [], after = '';
+	var childs = node.children;
+	
+	if(node.type === 'ELSE'){
+		res1.push(indent + "' + (!ctx." + node.varname + " ? ('");
+		for(let child of childs){
+			res1.push(toFunc(child, parent_tag));
+		}
+		res1.push(indent + "') : '' ) + '");
+		res1.push(node.after);
+		return res1.join(' ');
+	}
+	if(node.tagname || node.classnames || !parent_tag || node.type === 'IF'){
+		// it's a node
+		var tag;
+		if(node.tagname){
+			if(input_types.has(node.tagname)) {
+				node.assignments = node.assignments || [];
+				node.assignments.push(['type', node.tagname]);
+				tag = 'input';
+			} else {
+				tag = node.tagname;
+			}
+		} else {
+			switch(parent_tag){
+				case 'ol':
+				case 'ul':
+					tag = 'li';
+				break;
+				case 'tr':
+					tag = 'td';
+				break;
+				default:
+					tag = 'div';
+				break;
+			}
+		}
+		
+		if(node.type === 'IF'){
+			//childs = childs.concat(node.else_children.children);
+			//console.log('IF!', node);
+			node.else_children.varname = node.varname;
+			res1.push(indent + "' + (ctx." + node.varname + " ? ('");
+			for(let child of childs){
+				res1.push(toFunc(child, tag));
+			}
+			res1.push(indent + "') : '' ) + '");
+		} else {
+			for(let child of childs){
+				res1.push(toFunc(child, tag));
+			}
+		}
+		if(parent_tag){
+			res2.push(indent + '<' + tag);
+			if(node.classnames && node.classnames.length > 1){
+				res2.push(' class="' + node.classnames.substr(1).replace(/\./g, " ") + '"');
+			}
+			if(node.assignments){
+				var styles = [];
+				for(let ass of node.assignments){
+					var [key, val] = ass;
+					if(val[0] === '$'){
+						// its variable, lets take its val from context
+						var real_key = val.length === 1 ? key : val.substr(1);
+						val = getvar(real_key);
+					}
+					if(is_attr(key)){
+						res2.push(' ' + key + '="' + val + '"');
+					} else {
+						styles.push(key + ': ' + val + ';');
+					}
+				}
+				if(styles.length){
+					res2.push(' style="' + styles.join('') + '"');
+				}
+			}
+			res2.push('>');
+			if(node.varname !== undefined && !node.type){
+				var key = get_varname(node);
+				res2.push(indent + getvar(key));
+			} else {
+				res2.push(res1.join(' '));
+			}
+			if(node.type === 'IF' && node.else_children){
+				node.else_children.after = indent + '</' + tag + '>';
+			} else {
+				res2.push(indent + '</' + tag + '>');
+			}
+			return res2.join('');
+		}
+	} else {
+		// its var of text node
+		if(node.quoted_str){
+			return indent + node.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, function(_, key){
+				//console.log('Found!', key, context[key]);
+				return getvar(key);
+			});
+		}
+		if(node.variable){
+			return indent + node.variable;
+		}
+	}
+	return res1.join(' ');
+}
+
 Ozenfant.prototype.toHTML = function(context = {}){
-	var res = toHTML({children: this.struct.semantics}, context = context);
-	return res;
+	if(!this.struct.func){
+		var func_body = " return '" + toFunc({children: this.struct.semantics}) + "';";
+		this.struct.func = new Function('ctx', func_body);
+	}
+	var a = this.struct.func(context);
+	//var a = toHTML({children: this.struct.semantics}, context = context);
+	return a;
 }
 
 Ozenfant.prototype.searchByPath = function(path){
@@ -269,7 +391,7 @@ Ozenfant.prototype.updateBindings = function(){
 		}
 		this.bindings[varname] = this.searchByPath(this.node_vars_paths[varname]);
 		if(!this.bindings[varname]){
-			console.warn('No node found for var', varname, 'in path:', this.node_vars_paths[varname], 'in context', this.root, ', context', this.state);
+			//console.warn('No node found for var', varname, 'in path:', this.node_vars_paths[varname], 'in context', this.root, ', context', this.state);
 		}
 	}
 	for(let varname in this.text_vars_paths){
@@ -293,6 +415,7 @@ Ozenfant.prototype.getHTML = function(context = false){
 }
 Ozenfant.prototype.setRoot = function(node){
 	this.root = node;
+	return this;
 }
 Ozenfant.prototype._setVarVal = function(key, val){
 	if(this.if_else_vars[key]){
@@ -305,6 +428,7 @@ Ozenfant.prototype._setVarVal = function(key, val){
 			}
 		}
 	}
+	if(val instanceof Object) return;
 	this.bindings[key].textContent = val;
 }
 Ozenfant.prototype.set = function(key, val){
