@@ -33,7 +33,11 @@ var Ozenfant = function(str){
 	this.var_types = {};
 	this.state = {};
 	this.bindings = {};
-	get_vars({children: this.struct.semantics}, this.node_vars_paths, this.text_vars_paths, this.nodes_vars, '.', this.var_types, []);
+	this.varname_pool = {
+		vars: {},
+		var_aliases: {},
+	};
+	get_vars({children: this.struct.semantics}, this.node_vars_paths, this.text_vars_paths, this.nodes_vars, '.', this.var_types, [], this.varname_pool);
 	this.getIfElseVarsIndex();
 };
 
@@ -57,13 +61,26 @@ var get_varname = (node) => {
 	return key;
 }
 
+var register_varname = (varname, varname_pool) => {
+	if(varname_pool.vars[varname]){
+		// already exists!
+		init_if_empty(varname_pool.var_aliases, varname, []);
+		var new_name = 'ololo@!@!#_' + varname + '_' + varname_pool.var_aliases[varname].length;
+		varname_pool.var_aliases[varname].push(new_name);
+		varname = new_name;
+	} else {
+		varname_pool.vars[varname] = true;
+	}
+	return varname;
+}
+
 var add_to_if_else_pool = (pools, varname, path) => {
 	for(var pool of pools){
 		pool[varname] = path;
 	}
 }
 
-var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pools) => {
+var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pools, varname_pool) => {
 	if(node === undefined) debugger;
 	if(node.children){
 		var nodes_lag = 0;
@@ -84,10 +101,10 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 				if(zild.type === 'IF'){
 					var if_pool = {};
 					var else_pool = {};
-
-					node_pool[get_varname(zild)] = new_path;
-					add_to_if_else_pool(if_else_pools, get_varname(zild), new_path);
-					types[get_varname(zild)] = {
+					var varname = register_varname(get_varname(zild), varname_pool);
+					node_pool[varname] = new_path;
+					add_to_if_else_pool(if_else_pools, varname, new_path);
+					types[varname] = {
 						type: 'IF',
 						struct: zild,
 						if_pool,
@@ -97,19 +114,23 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 					if_pools.push(if_pool);
 					var else_pools = if_else_pools.slice();
 					else_pools.push(else_pool);
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools);
-					get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, else_pools);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					if(zild.else_children){
+						get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, else_pools, varname_pool);
+					}
 				} else {
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools, varname_pool);
 				}
 			} else {
 				if(zild.varname !== undefined){
-					add_to_if_else_pool(if_else_pools, get_varname(zild), new_path);
-					node_pool[get_varname(zild)] = new_path;
+					var varname = register_varname(get_varname(zild), varname_pool);
+					add_to_if_else_pool(if_else_pools, varname, new_path);
+					node_pool[varname] = new_path;
 					//console.log('Found var!', get_varname(node.children[i]), zild);
 				}
 				if(zild.attrStyleVars){
 					for(let [varname, attrname] of zild.attrStyleVars){
+						varname = register_varname(varname, varname_pool);
 						node_pool[varname] = new_path;
 						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
 						types[varname] = {
@@ -117,7 +138,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 							name: attrname,
 						}
 					}
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools, varname_pool);
 				} 
 				if(zild.quoted_str){
 					//console.log('str!', node.children[i].quoted_str);
@@ -130,7 +151,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 						//console.log('text key found', key, text_path);
 					})
 				} 
-				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools);
+				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools, varname_pool);
 			}
 		}
 	}
@@ -150,7 +171,11 @@ var toHTML = function(node, context, parent_tag){
 	if(node.type === 'IF'){
 		if(!context[node.varname]){
 			// "ELSE" part
-			childs = node.else_children.children;
+			if(node.else_children){
+				childs = node.else_children.children;
+			} else {
+				childs = [];
+			}
 		}
 	}
 	if(node.tagname || node.classnames || !parent_tag){
@@ -279,7 +304,9 @@ var toFunc = function(node, parent_tag){
 		if(node.type === 'IF'){
 			//childs = childs.concat(node.else_children.children);
 			//console.log('IF!', node);
-			node.else_children.varname = node.varname;
+			if(node.else_children){
+				node.else_children.varname = node.varname;
+			}
 			res1.push(indent + "' + (ctx." + node.varname + " ? ('");
 			for(let child of childs){
 				res1.push(toFunc(child, tag));
@@ -432,9 +459,16 @@ Ozenfant.prototype._setVarVal = function(key, val){
 	this.bindings[key].textContent = val;
 }
 Ozenfant.prototype.set = function(key, val){
+	if(this.varname_pool.var_aliases[key]){
+		for(let k of this.varname_pool.var_aliases[key]){
+			this.set(k, val);
+		}
+	}
 	this.state[key] = val;
 	if(!this.bindings[key]){
-		//console.warn('Unknown key for binding:', key);
+		if(key === 'isEditing'){
+			//console.warn('Unknown key for binding:', key, this.bindings);
+		}
 		return;
 	}
 	if(!this.root) return;
@@ -450,9 +484,17 @@ Ozenfant.prototype.set = function(key, val){
 		if(this.var_types[key]){
 			switch(this.var_types[key].type){
 				case 'IF':
-					var struct = val 
-					? this.var_types[key].struct.children 
-					: this.var_types[key].struct.else_children.children;
+					var val;
+					if(val){
+						var struct = this.var_types[key].struct.children;
+					} else {
+						if(this.var_types[key].struct.else_children){
+							var struct = this.var_types[key].struct.else_children.children;
+						} else {
+							this.updateBindings();
+							return;
+						}
+					}
 					var html = toHTML({children: struct}, this.state);
 					this.bindings[key].innerHTML = html;
 					// @todo should be optimized! update bindings only for dependent vars!
