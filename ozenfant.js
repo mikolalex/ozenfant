@@ -1,5 +1,5 @@
 var ozenfant_config = require('./config');
-var parser = require('ooo_oo_o').get_parser(ozenfant_config);
+var parser = require('../ooo_oo_o/parser').get_parser(ozenfant_config);
 
 var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
 	for(let i  = 1; ;i = i + 2){
@@ -80,6 +80,10 @@ var add_to_if_else_pool = (pools, varname, path) => {
 	}
 }
 
+var is_new_if = (a) => {
+	return ['NEW_ELSE', 'NEW_ELSEIF', 'NEW_IF'].indexOf(a.type) !== -1;
+}
+
 var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pools, varname_pool) => {
 	if(node === undefined) debugger;
 	if(node.children){
@@ -87,14 +91,66 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 		var text_lag = 0;
 		for(var i in node.children){
 			var zild = node.children[i];
-			if(!zild.tagname && !zild.classnames){
-				//console.log('text node!', node.children[i]);
-					++nodes_lag;
-			} else {
-					++text_lag;
+			var new_path = path;
+			if(!is_new_if(zild)){
+				if(!zild.tagname && !zild.classnames){
+						++nodes_lag;
+				} else {
+						++text_lag;
+				}
+				new_path = path + '/*[' + (Number(i) + 1 - nodes_lag) + ']';
 			}
-			var new_path = path + '/*[' + (Number(i) + 1 - nodes_lag) + ']';
-			if(zild.type && (zild.type === 'ELSE' || zild.type === 'IF')){
+			if(zild.type && (
+					zild.type === 'ELSE' 
+					|| zild.type === 'IF'
+					|| zild.type === 'NEW_IF'
+					|| zild.type === 'NEW_ELSEIF'
+					|| zild.type === 'NEW_ELSE')){
+				if(zild.type === 'NEW_IF'){
+					var my_pool = {};
+					var varname = register_varname(get_varname(zild), varname_pool);
+					node_pool[varname] = new_path;
+					add_to_if_else_pool(if_else_pools, varname, new_path);
+					var if_pools = if_else_pools.slice();
+					if_pools.push(my_pool);
+					types[varname] = {
+						type: 'NEW_IF',
+						struct: zild,
+						my_pool,
+					};
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					continue;
+				}
+				if(zild.type === 'NEW_ELSEIF'){
+					var my_pool = {};
+					var varname = register_varname(get_varname(zild), varname_pool);
+					node_pool[varname] = new_path;
+					add_to_if_else_pool(if_else_pools, varname, new_path);
+					var if_pools = if_else_pools.slice();
+					if_pools.push(my_pool);
+					types[varname] = {
+						type: 'NEW_ELSEIF',
+						struct: zild,
+						my_pool,
+					};
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					return;
+				}
+				if(zild.type === 'NEW_ELSE'){
+					var my_pool = {};
+					var varname = register_varname(get_varname(zild), varname_pool);
+					node_pool[varname] = new_path;
+					add_to_if_else_pool(if_else_pools, varname, new_path);
+					var if_pools = if_else_pools.slice();
+					if_pools.push(my_pool);
+					types[varname] = {
+						type: 'NEW_ELSE',
+						struct: zild,
+						my_pool,
+					};
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					return;
+				}
 				if(zild.type === 'ELSE'){
 					return;
 				}
@@ -259,7 +315,7 @@ var getvar = (key) => {
 	return "' + (ctx." + key + " || '') + '";
 }
 
-var toFunc = function(node, parent_tag){
+var toFunc = function(node, parent_tag, if_stack = {}){
 	var indent = ` ' + 
 '` + new Array(node.level).join('	');
 	//indent = '';// !
@@ -269,10 +325,42 @@ var toFunc = function(node, parent_tag){
 	if(node.type === 'ELSE'){
 		res1.push(indent + "' + (!ctx." + node.varname + " ? ('");
 		for(let child of childs){
-			res1.push(toFunc(child, parent_tag));
+			res1.push(toFunc(child, parent_tag, if_stack));
 		}
 		res1.push(indent + "') : '' ) + '");
 		res1.push(node.after);
+		return res1.join(' ');
+	}
+	if(node.type === 'NEW_IF'){
+		//console.log('IF STACK', if_stack);
+		if_stack[node.level] = [node.varname, node.expr, []];
+		res1.push(indent + "' + (" + node.expr + " ? ('");
+		for(let child of childs){
+			res1.push(toFunc(child, parent_tag, if_stack));
+		}
+		res1.push(indent + "') : '' ) + '");
+		return res1.join(' ');
+	}
+	if(node.type === 'NEW_ELSEIF'){
+		var [varname, expr, elifs] = if_stack[node.level];
+		if_stack[node.level][2].push(node.expr);
+		node.real_expr = node.expr + " && !(" + expr + ")";
+		res1.push(indent + "' + ((" + node.expr + " && !(" + expr + ")) ? ('");
+		for(let child of childs){
+			res1.push(toFunc(child, parent_tag, if_stack));
+		}
+		res1.push(indent + "') : '' ) + '");
+		return res1.join(' ');
+	}
+	if(node.type === 'NEW_ELSE'){
+		var [varname, expr, elifs] = if_stack[node.level];
+		node.varname = varname;
+		node.real_expr = "!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ")";
+		res1.push(indent + "' + (!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ") ? ('");
+		for(let child of childs){
+			res1.push(toFunc(child, parent_tag, if_stack));
+		}
+		res1.push(indent + "') : '' ) + '");
 		return res1.join(' ');
 	}
 	if(node.tagname || node.classnames || !parent_tag || node.type === 'IF'){
@@ -309,12 +397,12 @@ var toFunc = function(node, parent_tag){
 			}
 			res1.push(indent + "' + (ctx." + node.varname + " ? ('");
 			for(let child of childs){
-				res1.push(toFunc(child, tag));
+				res1.push(toFunc(child, tag, if_stack));
 			}
 			res1.push(indent + "') : '' ) + '");
 		} else {
 			for(let child of childs){
-				res1.push(toFunc(child, tag));
+				res1.push(toFunc(child, tag, if_stack));
 			}
 		}
 		if(parent_tag){
@@ -370,7 +458,12 @@ var toFunc = function(node, parent_tag){
 	return res1.join(' ');
 }
 
-Ozenfant.prototype.toHTML = function(context = {}){
+Ozenfant.prototype.toHTML = function(context){
+	if(context){
+		this.state = context;
+	} else {
+		context = {};
+	}
 	if(!this.struct.func){
 		var func_body = " return '" + toFunc({children: this.struct.semantics}) + "';";
 		this.struct.func = new Function('ctx', func_body);
@@ -394,6 +487,11 @@ Ozenfant.prototype.getIfElseVarsIndex = function(){
 		for(var varname in this.var_types[one].else_pool){
 			var path = this.var_types[one].if_pool[varname];
 			init_if_empty(this.if_else_vars, varname, {}, one, false);
+		}
+		for(var varname in this.var_types[one].my_pool){
+			var path = this.var_types[one].my_pool[varname];
+			var expr = this.var_types[one].struct.real_expr || this.var_types[one].struct.expr;
+			init_if_empty(this.if_else_vars, varname, {}, one, expr);
 		}
 	}
 }
@@ -428,12 +526,30 @@ Ozenfant.prototype.updateBindings = function(){
 		}
 	}
 }
-Ozenfant.prototype.render = function(node, context){
+Ozenfant.prototype.render = function(node, context = false){
 	this.root = node;
-	this.state = context;
+	if(context){
+		this.state = context;
+	}
 	node.innerHTML = this.toHTML(this.state);
 	this.updateBindings();
 }
+Ozenfant.prototype.getTokenStruct = function(node, level = 1){
+	var start = !node;
+	if(!node){
+		node = this.struct.syntax;
+	}
+	var arr = [new Array(level).join('	') + node.type];
+	if(node.children){
+		for(var child of node.children){
+			arr.push(this.getTokenStruct(child, level + 1));
+		}
+	}
+	return (start ? `
+` : '') + arr.join(`
+`);
+}
+
 Ozenfant.prototype.getHTML = function(context = false){
 	if(context) { 
 		this.state = context;
@@ -466,9 +582,6 @@ Ozenfant.prototype.set = function(key, val){
 	}
 	this.state[key] = val;
 	if(!this.bindings[key]){
-		if(key === 'isEditing'){
-			//console.warn('Unknown key for binding:', key, this.bindings);
-		}
 		return;
 	}
 	if(!this.root) return;

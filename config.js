@@ -35,6 +35,18 @@ module.exports = {
 				[
 					'|',
 					{
+						type: 'new_if',
+							optional: true,
+					},
+					{
+						type: 'new_elseif',
+							optional: true,
+					},
+					{
+						type: 'new_else',
+							optional: true,
+					},
+					{
 						type: 'ternary_else',
 					},
 					[
@@ -126,6 +138,18 @@ module.exports = {
 		},
 		ternary_else: {
 			regex: /^\:$/,
+			free_chars: true,
+		},
+		new_if: {
+			regex: /^\?\s?(.*)?$/,
+			free_chars: true,
+		},
+		new_elseif: {
+			regex: /^\*\s?(.*)?$/,
+			free_chars: true,
+		},
+		new_else: {
+			regex: /^\;$/,
 			free_chars: true,
 		},
 		varname: {
@@ -220,6 +244,21 @@ module.exports = {
 						break;
 						case 'ternary_else':
 							res.type = "ELSE";
+						break;
+						case 'new_if':
+							var chars = child.chars;
+							res.varname = chars.match(/\$([^\s]*)/)[1];
+							res.expr = chars.replace(/\?\s?/, '').replace('$' + res.varname, 'ctx.' + res.varname);
+							res.type = child.type.toUpperCase();
+						break;
+						case 'new_elseif':
+							var chars = child.chars;
+							res.varname = chars.match(/\$([^\s]*)/)[1];
+							res.expr = chars.replace(/\*\s?/, '').replace('$' + res.varname, 'ctx.' + res.varname);
+							res.type = child.type.toUpperCase();
+						break;
+						case 'new_else':
+							res.type = child.type.toUpperCase();
 						break;
 						case 'indent':
 							res.level = child.chars.length;
