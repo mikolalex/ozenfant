@@ -23,21 +23,34 @@ var is_attr = (str) => {
 var Ozenfant = function(str){
 	if(str instanceof Object){
 		this.struct = str;// compiled struct
+		this.node_vars_paths = this.struct.node_vars_paths;
+		this.text_vars_paths = this.struct.text_vars_paths;
+		this.nodes_vars = this.struct.nodes_vars;
+		this.var_types = this.struct.var_types;
+		this.varname_pool = this.struct.varname_pool;
 	} else {
 		this.struct = parser(str + `
 `);
+		this.node_vars_paths = {};
+		this.text_vars_paths = {};
+		this.nodes_vars = {};
+		this.var_types = {};
+		this.varname_pool = {
+			vars: {},
+			var_aliases: {},
+		};
+		get_vars({children: this.struct.semantics, root: true}
+			, this.node_vars_paths
+			, this.text_vars_paths
+			, this.nodes_vars
+			, '.'
+			, this.var_types
+			, []
+			, this.varname_pool);
 	}
-	this.node_vars_paths = {};
-	this.text_vars_paths = {};
-	this.nodes_vars = {};
-	this.var_types = {};
 	this.state = {};
 	this.bindings = {};
-	this.varname_pool = {
-		vars: {},
-		var_aliases: {},
-	};
-	get_vars({children: this.struct.semantics, root: true}, this.node_vars_paths, this.text_vars_paths, this.nodes_vars, '.', this.var_types, [], this.varname_pool);
+
 	this.getIfElseVarsIndex();
 };
 
@@ -52,7 +65,24 @@ var create_func = (str, condition) => {
 Ozenfant.prepare = (str) => {
 	var struct = parser(str + `
 `);
+	struct.node_vars_paths = {};
+	struct.text_vars_paths = {};
+	struct.nodes_vars = {};
+	struct.var_types = {};
+	struct.varname_pool = {
+		vars: {},
+		var_aliases: {},
+	};
 	struct.func = create_func(toFunc({children: struct.semantics}));
+	get_vars({children: struct.semantics, root: true}
+		, struct.node_vars_paths
+		, struct.text_vars_paths
+		, struct.nodes_vars
+		, '.'
+		, struct.var_types
+		, []
+		, struct.varname_pool);
+	
 	return struct;
 }
 
@@ -309,26 +339,36 @@ var getvar = (key) => {
 	return "' + (ctx." + key + " || '') + '";
 }
 
-var get_children_html = (childs, parent_tag, if_stack) => {
+var get_children_html = (childs, parent_tag, if_stack, pp) => {
 	var res1 = [];
 	for(let child of childs){
-		res1.push(toFunc(child, parent_tag, if_stack));
+		res1.push(toFunc(child, parent_tag, if_stack, pp));
 	}
 	return res1.join('');
 }
 
-var toFunc = function(node, parent_tag, if_stack = {}){
+var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
+	node.parent = parent;
+	var childs = node.children;
 	var indent = ` ' + 
 '` + new Array(node.level).join('	');
 	//indent = '';// !
 	var res1 = [], res2 = [], after = '', res_final;
-	var childs = node.children;
 	var childs_html = '';
+	var need_partial_func = false;
+	var pp = false;
+	for(let child of childs){
+		if(is_new_if(child)){
+			need_partial_func = true;
+			pp = [];
+			break;
+		}
+	}
 	if(node.type === 'ELSE' || is_new_if(node)){
 		switch(node.type){
 			case 'ELSE':
 				res1.push(indent + "' + (!ctx." + node.varname + " ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 				res1.push(node.after);
@@ -337,7 +377,7 @@ var toFunc = function(node, parent_tag, if_stack = {}){
 				//console.log('IF STACK', if_stack);
 				if_stack[node.level] = [node.varname, node.expr, []];
 				res1.push(indent + "' + (" + node.expr + " ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 			break;
@@ -346,7 +386,7 @@ var toFunc = function(node, parent_tag, if_stack = {}){
 				if_stack[node.level][2].push(node.expr);
 				node.real_expr = node.expr + " && !(" + expr + ")";
 				res1.push(indent + "' + ((" + node.expr + " && !(" + expr + ")) ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 			break;
@@ -355,7 +395,7 @@ var toFunc = function(node, parent_tag, if_stack = {}){
 				node.varname = varname;
 				node.real_expr = "!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ")";
 				res1.push(indent + "' + (!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ") ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 			break;
@@ -394,11 +434,11 @@ var toFunc = function(node, parent_tag, if_stack = {}){
 			}
 			res1.push(indent + "' + (ctx." + node.varname + " ? ('");
 			for(let child of childs){
-				res1.push(toFunc(child, tag, if_stack));
+				res1.push(toFunc(child, tag, if_stack, pp));
 			}
 			res1.push(indent + "') : '' ) + '");
 		} else {
-			childs_html = get_children_html(childs, tag, if_stack);
+			childs_html = get_children_html(childs, tag, if_stack, pp);
 			res1.push(childs_html);
 		}
 		if(parent_tag){
@@ -452,15 +492,22 @@ var toFunc = function(node, parent_tag, if_stack = {}){
 		}
 	}
 	res_final = res_final || res1.join('');
-	var need_partial_func = false;
-	for(let child of childs){
-		if(child.type === 'NEW_IF'){
-			need_partial_func = true;
-			break;
-		}
-	}
 	if(need_partial_func){
-		node.partial_func = create_func(childs_html);
+		if(partial_pool){
+			partial_pool.push(node);
+			if(pp){
+				for(let nd of pp){
+					partial_pool.push(nd);
+				}
+			}
+		} else {
+			node.partial_func = create_func(childs_html);
+			if(pp){
+				for(let nd of pp){
+					nd.partial_func = node.partial_func;
+				}
+			}
+		}
 	}
 	return res_final;
 }
@@ -583,6 +630,9 @@ Ozenfant.prototype._setVarVal = function(key, val){
 	this.bindings[key].textContent = val;
 }
 Ozenfant.prototype.set = function(key, val){
+	if(this.state[key] === val){
+		return; 
+	} 
 	if(this.varname_pool.var_aliases[key]){
 		for(let k of this.varname_pool.var_aliases[key]){
 			this.set(k, val);
@@ -628,12 +678,14 @@ Ozenfant.prototype.set = function(key, val){
 					this.bindings[key].style[this.var_types[key].name] = val;
 				break;
 				default:
+					var func;
 					if(this.var_types[key] === 'USE_ROOT_FUNC'){
-						this.bindings[key].innerHTML = this.struct.func(this.state);
+						func = this.struct.func;
 					}
 					if(this.var_types[key] instanceof Function){
-						this.bindings[key].innerHTML = this.var_types[key](this.state);
+						func = this.var_types[key];
 					}
+					this.bindings[key].innerHTML = func(this.state);
 					this.updateBindings();
 				break;
 			}

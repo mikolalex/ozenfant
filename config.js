@@ -149,7 +149,7 @@ module.exports = {
 			free_chars: true,
 		},
 		new_else: {
-			regex: /^\;$/,
+			regex: /^\:$/,
 			free_chars: true,
 		},
 		varname: {
