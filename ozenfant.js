@@ -137,6 +137,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 	if(node.children){
 		var nodes_lag = 0;
 		var text_lag = 0;
+		var resigtered_vars = {};
 		for(var i in node.children){
 			var zild = node.children[i];
 			var new_path = path;
@@ -157,6 +158,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 				if(zild.type === 'NEW_IF'){
 					var my_pool = {};
 					var varname = register_varname(get_varname(zild), varname_pool);
+					resigtered_vars[varname] = true;
 					node_pool[varname] = new_path;
 					add_to_if_else_pool(if_else_pools, varname, new_path);
 					var if_pools = if_else_pools.slice();
@@ -168,6 +170,10 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 				if(zild.type === 'NEW_ELSEIF' || zild.type === 'NEW_ELSE'){
 					var my_pool = {};
 					var varname = get_varname(zild);
+					if(!resigtered_vars[varname]){
+						register_varname(varname, varname_pool);
+					}
+					types[varname] = get_partial_func(node);
 					node_pool[varname] = new_path;
 					add_to_if_else_pool(if_else_pools, varname, new_path);
 					var if_pools = if_else_pools.slice();
@@ -685,7 +691,9 @@ Ozenfant.prototype.set = function(key, val){
 					if(this.var_types[key] instanceof Function){
 						func = this.var_types[key];
 					}
-					this.bindings[key].innerHTML = func(this.state);
+					var html = func(this.state);
+					//console.log('run func', func, 'of', key, 'val', val, /*'with state', JSON.stringify(this.state),*/ '___________html', html, 'to', this);
+					this.bindings[key].innerHTML = html;
 					this.updateBindings();
 				break;
 			}
