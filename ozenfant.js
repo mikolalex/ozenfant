@@ -20,6 +20,8 @@ var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
 }
 
+var text_var_regexp = /\{\{([a-zA-Z0-9]*)\}\}/g;///\$([a-zA-Z0-9]*)/g;
+
 var Ozenfant = function(str){
 	if(str instanceof Object){
 		this.struct = str;// compiled struct
@@ -28,6 +30,7 @@ var Ozenfant = function(str){
 		this.nodes_vars = this.struct.nodes_vars;
 		this.var_types = this.struct.var_types;
 		this.varname_pool = this.struct.varname_pool;
+		this.if_else_tree = this.struct.if_else_tree;
 	} else {
 		this.struct = parser(str + `
 `);
@@ -39,6 +42,7 @@ var Ozenfant = function(str){
 			vars: {},
 			var_aliases: {},
 		};
+		this.if_else_tree = {str_to_func: {}, var_funcs: {}};
 		get_vars({children: this.struct.semantics, root: true}
 			, this.node_vars_paths
 			, this.text_vars_paths
@@ -46,7 +50,9 @@ var Ozenfant = function(str){
 			, '.'
 			, this.var_types
 			, []
-			, this.varname_pool);
+			, this.varname_pool
+			, this.if_else_tree
+		);
 	}
 	this.state = {};
 	this.bindings = {};
@@ -74,6 +80,7 @@ Ozenfant.prepare = (str) => {
 		var_aliases: {},
 	};
 	struct.func = create_func(toFunc({children: struct.semantics}));
+	struct.if_else_tree = {str_to_func: {}, var_funcs: {}};
 	get_vars({children: struct.semantics, root: true}
 		, struct.node_vars_paths
 		, struct.text_vars_paths
@@ -81,7 +88,9 @@ Ozenfant.prepare = (str) => {
 		, '.'
 		, struct.var_types
 		, []
-		, struct.varname_pool);
+		, struct.varname_pool
+		, struct.if_else_tree
+	);
 	
 	return struct;
 }
@@ -98,7 +107,7 @@ var get_varname = (node) => {
 	return key;
 }
 
-var register_varname = (varname, varname_pool) => {
+var register_varname = (varname, varname_pool, if_else_deps, if_else_tree) => {
 	if(varname_pool.vars[varname]){
 		// already exists!
 		init_if_empty(varname_pool.var_aliases, varname, []);
@@ -107,6 +116,14 @@ var register_varname = (varname, varname_pool) => {
 		varname = new_name;
 	} else {
 		varname_pool.vars[varname] = true;
+	}
+	var deps = if_else_deps.length ? ('(' + if_else_deps.join(') && (') + ')') : false;
+	if(deps){
+		if(if_else_tree.str_to_func[deps]){
+			if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps];
+		} else {
+			if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps] = new Function('ctx', 'return ' + deps);
+		}
 	}
 	return varname;
 }
@@ -132,8 +149,9 @@ var get_partial_func = (node) => {
 	
 }
 
-var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pools, varname_pool) => {
+var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps, varname_pool, if_else_tree) => {
 	if(node === undefined) debugger;
+	//if_else_deps = [...if_else_deps];
 	if(node.children){
 		var nodes_lag = 0;
 		var text_lag = 0;
@@ -156,67 +174,54 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 					|| zild.type === 'NEW_ELSEIF'
 					|| zild.type === 'NEW_ELSE')){
 				if(zild.type === 'NEW_IF'){
-					var my_pool = {};
-					var varname = register_varname(get_varname(zild), varname_pool);
+					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree);
 					resigtered_vars[varname] = true;
 					node_pool[varname] = new_path;
-					add_to_if_else_pool(if_else_pools, varname, new_path);
-					var if_pools = if_else_pools.slice();
-					if_pools.push(my_pool);
 					types[varname] = get_partial_func(node);
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					var my_if_else_deps = [...if_else_deps];
+					my_if_else_deps.push(zild.expr)
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree);
 					continue;
 				}
 				if(zild.type === 'NEW_ELSEIF' || zild.type === 'NEW_ELSE'){
-					var my_pool = {};
 					var varname = get_varname(zild);
 					if(!resigtered_vars[varname]){
-						register_varname(varname, varname_pool);
+						register_varname(varname, varname_pool, if_else_deps, if_else_tree);
 					}
 					types[varname] = get_partial_func(node);
 					node_pool[varname] = new_path;
-					add_to_if_else_pool(if_else_pools, varname, new_path);
-					var if_pools = if_else_pools.slice();
-					if_pools.push(my_pool);
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					var my_if_else_deps = [...if_else_deps];
+					my_if_else_deps.push(zild.real_expr)
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree);
 					continue;
 				}
 				if(zild.type === 'ELSE'){
 					return;
 				}
 				if(zild.type === 'IF'){
-					var if_pool = {};
-					var else_pool = {};
-					var varname = register_varname(get_varname(zild), varname_pool);
+					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree);
 					node_pool[varname] = new_path;
-					add_to_if_else_pool(if_else_pools, varname, new_path);
 					types[varname] = {
 						type: 'IF',
 						struct: zild,
 						if_pool,
 						else_pool,
 					};
-					var if_pools = if_else_pools.slice();
-					if_pools.push(if_pool);
-					var else_pools = if_else_pools.slice();
-					else_pools.push(else_pool);
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_pools, varname_pool);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
 					if(zild.else_children){
-						get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, else_pools, varname_pool);
+						get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
 					}
 				} else {
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools, varname_pool);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_deps, varname_pool, if_else_tree);
 				}
 			} else {
 				if(zild.varname !== undefined){
-					var varname = register_varname(get_varname(zild), varname_pool);
-					add_to_if_else_pool(if_else_pools, varname, new_path);
+					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree);
 					node_pool[varname] = new_path;
-					//console.log('Found var!', get_varname(node.children[i]), zild);
 				}
 				if(zild.attrStyleVars){
 					for(let [varname, attrname] of zild.attrStyleVars){
-						varname = register_varname(varname, varname_pool);
+						varname = register_varname(varname, varname_pool, if_else_deps, if_else_tree);
 						node_pool[varname] = new_path;
 						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
 						types[varname] = {
@@ -224,20 +229,21 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_pool
 							name: attrname,
 						}
 					}
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools, varname_pool);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
 				} 
 				if(zild.quoted_str){
 					//console.log('str!', node.children[i].quoted_str);
-					zild.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, (_, key) => {
+					zild.quoted_str.replace(text_var_regexp, (_, key) => {
 						var text_path = path + '/text()[' + (Number(i) + 1 - text_lag) + ']';
+						varname = register_varname(key, varname_pool, if_else_deps, if_else_tree);
 						if(!path_pool[text_path]){
 							path_pool[text_path] = zild.quoted_str;
 						}
-						text_pool[key] = text_path;
+						text_pool[varname] = text_path;
 						//console.log('text key found', key, text_path);
 					})
 				} 
-				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_pools, varname_pool);
+				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
 			}
 		}
 	}
@@ -329,7 +335,7 @@ var toHTML = function(node, context, parent_tag){
 	} else {
 		// its var of text node
 		if(node.quoted_str){
-			return indent + node.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, function(_, key){
+			return indent + node.quoted_str.replace(text_var_regexp, function(_, key){
 				//console.log('Found!', key, context[key]);
 				return context[key] !== undefined ? context[key] : '';
 			});
@@ -488,9 +494,9 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 	} else {
 		// its var of text node
 		if(node.quoted_str){
-			res_final = indent + node.quoted_str.replace(/\$([a-zA-Z0-9]*)/g, function(_, key){
+			res_final = indent + node.quoted_str.replace(text_var_regexp, function(_, key){
 				//console.log('Found!', key, context[key]);
-				return getvar(key);
+				return "' + ctx." + key + " + '";
 			});
 		}
 		if(node.variable){
@@ -633,30 +639,41 @@ Ozenfant.prototype._setVarVal = function(key, val){
 		}
 	}
 	if(val instanceof Object) return;
-	this.bindings[key].textContent = val;
+	this.bindings[key].innerHTML = val;
 }
 Ozenfant.prototype.set = function(key, val){
 	if(this.state[key] === val){
 		return; 
 	} 
+	this.state[key] = val;
 	if(this.varname_pool.var_aliases[key]){
 		for(let k of this.varname_pool.var_aliases[key]){
 			this.set(k, val);
 		}
 	}
-	this.state[key] = val;
 	if(!this.bindings[key]){
 		return;
 	}
 	if(!this.root) return;
 	//console.log('path', this.text_vars_paths[key], 'vars', this.nodes_vars);
+	if(this.if_else_tree.var_funcs[key]){
+		//console.log('should check the func first!', key);
+		if(!this.if_else_tree.var_funcs[key](this.state)){
+			// no need to update anything in DOM - it's not an active branch
+			//console.log('skip', key, this.if_else_tree.var_funcs[key].toString());
+			return;
+		} else {
+			//console.log('OK!', key, this.if_else_tree.var_funcs[key].toString());
+		}
+	}
 	if(this.nodes_vars[this.text_vars_paths[key]]){
-		var template = this.nodes_vars[this.text_vars_paths[key]]
-		var new_str = template.replace(/\$([a-zA-Z0-9]*)/g, (_, key) => {
+		var template = this.nodes_vars[this.text_vars_paths[key]];
+		//console.log('template!', template);
+		var new_str = template.replace(text_var_regexp, (_, key) => {
 			return this.state[key];
 		});
 		this._setVarVal(key, new_str);
-		this.bindings[key].textContent = new_str;
+		this.bindings[key].innerHTML = new_str;
 	} else {
 		if(this.var_types[key]){
 			switch(this.var_types[key].type){
@@ -692,7 +709,7 @@ Ozenfant.prototype.set = function(key, val){
 						func = this.var_types[key];
 					}
 					var html = func(this.state);
-					//console.log('run func', func, 'of', key, 'val', val, /*'with state', JSON.stringify(this.state),*/ '___________html', html, 'to', this);
+					//console.log('run func', func, 'of', key, 'val', val, /*'with state', JSON.stringify(this.state),*/ 'if_else_deps____html', html, 'to', this);
 					this.bindings[key].innerHTML = html;
 					this.updateBindings();
 				break;
