@@ -66,7 +66,7 @@ var create_func = (str, condition) => {
 	if(condition){
 		body = condition + ' ? ' + body + ' : false';
 	}
-	return new Function('ctx', 'return ' + body + ';');
+	return new Function('ctx', 'var res = []; var res2 = []; res.push(' + body + '); return res.join("");');
 }
 
 Ozenfant.prepare = (str) => {
@@ -81,6 +81,7 @@ Ozenfant.prepare = (str) => {
 		var_aliases: {},
 	};
 	struct.func = create_func(toFunc({children: struct.semantics}));
+	//console.log('Struct func', struct.func);
 	struct.if_else_tree = {str_to_func: {}, var_funcs: {}};
 	get_vars({children: struct.semantics, root: true}
 		, struct.node_vars_paths
@@ -350,16 +351,39 @@ var toHTML = function(node, context, parent_tag){
 var getvar = (key) => {
 	return "' + (ctx." + key + " || '') + '";
 }
+var getvar_raw = (key) => {
+	return "' + (" + key + " || '') + '";
+}
 
-var get_children_html = (childs, parent_tag, if_stack, pp) => {
+var get_children_html = (childs, parent_tag, if_stack, pp, loop_level) => {
 	var res1 = [];
 	for(let child of childs){
-		res1.push(toFunc(child, parent_tag, if_stack, pp));
+		res1.push(toFunc(child, parent_tag, if_stack, pp, loop_level));
 	}
 	return res1.join('');
 }
 
-var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
+var toFuncVarname = (a) => {
+	var dot_counter = 0;
+	for(var cp in a){
+		if(a[cp] === '.'){
+			++dot_counter;
+		} else {
+			break;
+		}
+	}
+	if(dot_counter){
+		a = '__loopvar' + dot_counter + '.' + a.substr(dot_counter);
+	} else {
+		a = 'ctx.' + a;
+	}
+	return a;
+}
+
+var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loop_level = 0){
+	if(node.loop){
+		++loop_level;
+	}
 	node.parent = parent;
 	var childs = node.children;
 	var indent = ` ' + 
@@ -379,17 +403,17 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 	if(node.type === 'ELSE' || is_new_if(node)){
 		switch(node.type){
 			case 'ELSE':
-				res1.push(indent + "' + (!ctx." + node.varname + " ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
+				res1.push(indent + "' + (!ctx." + toFuncVarname(node.varname) + " ? ('");
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 				res1.push(node.after);
 			break;
 			case 'NEW_IF':
 				//console.log('IF STACK', if_stack);
-				if_stack[node.level] = [node.varname, node.expr, []];
+				if_stack[node.level] = [toFuncVarname(node.varname), node.expr, []];
 				res1.push(indent + "' + (" + node.expr + " ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 			break;
@@ -398,7 +422,7 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 				if_stack[node.level][2].push(node.expr);
 				node.real_expr = node.expr + " && !(" + expr + ")";
 				res1.push(indent + "' + ((" + node.expr + " && !(" + expr + ")) ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 			break;
@@ -407,7 +431,7 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 				node.varname = varname;
 				node.real_expr = "!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ")";
 				res1.push(indent + "' + (!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ") ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack, pp);
+				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(indent + "') : '' ) + '");
 			break;
@@ -439,18 +463,16 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 		}
 		
 		if(node.type === 'IF'){
-			//childs = childs.concat(node.else_children.children);
-			//console.log('IF!', node);
 			if(node.else_children){
 				node.else_children.varname = node.varname;
 			}
 			res1.push(indent + "' + (ctx." + node.varname + " ? ('");
 			for(let child of childs){
-				res1.push(toFunc(child, tag, if_stack, pp));
+				res1.push(toFunc(child, tag, if_stack, pp, loop_level));
 			}
 			res1.push(indent + "') : '' ) + '");
 		} else {
-			childs_html = get_children_html(childs, tag, if_stack, pp);
+			childs_html = get_children_html(childs, tag, if_stack, pp, loop_level);
 			res1.push(childs_html);
 		}
 		if(parent_tag){
@@ -465,7 +487,8 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 					if(val[0] === '$'){
 						// its variable, lets take its val from context
 						var real_key = val.length === 1 ? key : val.substr(1);
-						val = getvar(real_key);
+						real_key = toFuncVarname(real_key);
+						val = getvar_raw(real_key);
 					}
 					if(is_attr(key)){
 						res2.push(' ' + key + '="' + val + '"');
@@ -482,7 +505,17 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false){
 				var key = get_varname(node);
 				res2.push(indent + getvar(key));
 			} else {
-				res2.push(res1.join(' '));
+				if(node.loop){
+					var loopvar = toFuncVarname(node.loop);
+					res2.push(`'); 
+					for(var ___k` + loop_level + ` in ` + loopvar + `) { 
+						var __loopvar` + loop_level + ` = ` + loopvar + `[___k` + loop_level + `]; 
+						res.push('` + childs_html + `'); 
+					} 
+					res.push('`);
+				} else {
+					res2.push(res1.join(' '));
+				}
 			}
 			if(node.type === 'IF' && node.else_children){
 				node.else_children.after = indent + '</' + tag + '>';

@@ -75,6 +75,10 @@ module.exports = {
 							optional: true,
 						},
 						{
+							type: 'loop',
+							optional: true,
+						},
+						{
 							type: 'str',
 							optional: true,
 						},
@@ -166,6 +170,10 @@ module.exports = {
 		},
 		tagname: {
 			regex: /^[a-zA-Z0-9]+$/,
+			free_chars: true,
+		},
+		loop: {
+			regex: /\{([^\n]*)?$/,
 			free_chars: true,
 		},
 		str: {
@@ -262,6 +270,10 @@ module.exports = {
 						break;
 						case 'indent':
 							res.level = child.chars.length;
+							//console.log('INDEX', res.level);
+						break;
+						case 'loop':
+							res.loop = child.chars.match(/\{\$([^\}]*)\}/)[1];
 							//console.log('INDEX', res.level);
 						break;
 						case 'bracket':
