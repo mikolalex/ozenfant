@@ -129,7 +129,7 @@ describe('Amadee Ozenfant', function () {
 					.
 						"Dummy!"
 				footer
-					"Some info. Copyright (c) $year"
+					"Some info. Copyright (c) {{year}}"
 		`;
 		var tmpl = new Ozenfant(tmpl);
 		tmpl.render($(".test-variables").get(0), context);
@@ -142,19 +142,20 @@ describe('Amadee Ozenfant', function () {
 		tmpl.set('year', '2011');
 		
 		assert.equal($(".test-variables .login").html(), 'Ed1do');
-		assert.equal($(".test-variables footer").html(), 'Some info. Copyright (c) 2011');
+		assert.equal($.trim($(".test-variables footer").html()), 'Some info. Copyright (c) 2011');
 		
 	})
 	it('Testing if/else expression', function(){
 		var tmpl = `
-			
-				.$logged_in?
-					"Hello, mr."
-					span.username$
-					"!"
-				:
-					"Please, log in!"
-					.no_luck$
+				.
+					? $logged_in
+						"Hello, mr."
+						span.username$
+						"!"
+					:
+						.
+							"Please, log in!"
+						.no_luck$
 		`;
 		var ctx = {logged_in: true, username: 'Mikolalex', no_luck: 'Looser!'};
 		var tmpl = new Ozenfant(tmpl);
@@ -211,19 +212,21 @@ describe('Amadee Ozenfant', function () {
 	
 	it('testing nested if/else', () => {
 		var tmpl = `
-			.$isObj?
-					.
-							"OBJ"
-					.$isOpened?
-							a.close
-									"close"
-					:
-							a.open
-									"Open"
-			:
-					.
-							"Scalar"
-					.val$
+			.
+				? $isObj
+						.
+								"OBJ"
+						.
+							? $isOpened
+									a.close
+											"close"
+							:
+									a.open
+											"Open"
+				:
+						.
+								"Scalar"
+						.val$
 		`;
 		tmpl = new Ozenfant(tmpl, {
 			isObj: true
@@ -231,6 +234,78 @@ describe('Amadee Ozenfant', function () {
 		tmpl.render($(".test-nested-if").get(0), {
 			isObj: true
 		});
+		//console.log('RES', tmpl.toHTML());
+	})
+	it('testing nested loops', () => {
+		var tmpl = `
+			h1.$title
+			ul.people{$people}
+				li
+					.name$.name
+					.surname$.surname
+					.company$
+					.relatives
+						select{$.relatives}
+							option(value: $.type, data-name: $..$name).$.name
+								
+		
+		`;
+		tmpl = new Ozenfant(tmpl, {
+			title: 'People\'s list',
+			people: [
+				{
+					name: 'Michael',
+					surname: 'Petrenko',
+					relatives: [
+						{
+							type: 'sister',
+							name: 'Katherine Kovalchuk'
+						},
+						{
+							type: 'father',
+							name: 'Opanas Petrenko'
+						},
+						{
+							type: 'mother',
+							name: 'Hrystya Petrenko'
+						},
+					]
+				},
+				{
+					name: 'John',
+					surname: 'Kovalchuk',
+					relatives: [
+						{
+							type: 'son',
+							name: 'Peter Kovalchuk'
+						},
+						{
+							type: 'father',
+							name: 'Petro Kovalchuk'
+						},
+					]
+				},
+				{
+					name: 'Katherine',
+					surname: 'Kovalchuk',
+					relatives: [
+						{
+							type: 'husband',
+							name: 'John Kovalchuk'
+						},
+						{
+							type: 'father',
+							name: 'Ivan Netudyhata'
+						},
+						{
+							type: 'mother',
+							name: 'Ganna Netudyhata'
+						},
+					]
+				},
+			],
+		});
+		tmpl.render($(".test-nested-loop").get(0));
 		//console.log('RES', tmpl.toHTML());
 	})
 })

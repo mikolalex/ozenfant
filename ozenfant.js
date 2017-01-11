@@ -42,6 +42,7 @@ var Ozenfant = function(str){
 			vars: {},
 			var_aliases: {},
 		};
+		this.func = create_func(toFunc({children: this.struct.semantics}));
 		this.if_else_tree = {str_to_func: {}, var_funcs: {}};
 		get_vars({children: this.struct.semantics, root: true}
 			, this.node_vars_paths
@@ -150,7 +151,6 @@ var get_partial_func = (node) => {
 }
 
 var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps, varname_pool, if_else_tree) => {
-	if(node === undefined) debugger;
 	//if_else_deps = [...if_else_deps];
 	if(node.children){
 		var nodes_lag = 0;
@@ -639,7 +639,7 @@ Ozenfant.prototype._setVarVal = function(key, val){
 		}
 	}
 	if(val instanceof Object) return;
-	this.bindings[key].innerHTML = val;
+	this.bindings[key].textContent = val;
 }
 Ozenfant.prototype.set = function(key, val){
 	if(this.state[key] === val){
@@ -660,10 +660,7 @@ Ozenfant.prototype.set = function(key, val){
 		//console.log('should check the func first!', key);
 		if(!this.if_else_tree.var_funcs[key](this.state)){
 			// no need to update anything in DOM - it's not an active branch
-			//console.log('skip', key, this.if_else_tree.var_funcs[key].toString());
 			return;
-		} else {
-			//console.log('OK!', key, this.if_else_tree.var_funcs[key].toString());
 		}
 	}
 	if(this.nodes_vars[this.text_vars_paths[key]]){
