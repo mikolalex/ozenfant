@@ -81,7 +81,7 @@ Ozenfant.prepare = (str) => {
 		var_aliases: {},
 	};
 	struct.func = create_func(toFunc({children: struct.semantics}));
-	//console.log('Struct func', struct.func);
+	//console.log('Struct func', struct);
 	struct.if_else_tree = {str_to_func: {}, var_funcs: {}};
 	get_vars({children: struct.semantics, root: true}
 		, struct.node_vars_paths
@@ -502,8 +502,8 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 			}
 			res2.push('>');
 			if(node.varname !== undefined && !node.type){
-				var key = get_varname(node);
-				res2.push(indent + getvar(key));
+				var key = toFuncVarname(get_varname(node));
+				res2.push(indent + getvar_raw(key));
 			} else {
 				if(node.loop){
 					var loopvar = toFuncVarname(node.loop);
