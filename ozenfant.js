@@ -31,6 +31,7 @@ var Ozenfant = function(str){
 		this.var_types = this.struct.var_types;
 		this.varname_pool = this.struct.varname_pool;
 		this.if_else_tree = this.struct.if_else_tree;
+		this.loop_pool = this.struct.loop_pool;
 	} else {
 		this.struct = parser(str + `
 `);
@@ -44,6 +45,7 @@ var Ozenfant = function(str){
 		};
 		this.func = create_func(toFunc({children: this.struct.semantics}));
 		this.if_else_tree = {str_to_func: {}, var_funcs: {}};
+		this.loop_pool = {};
 		get_vars({children: this.struct.semantics, root: true}
 			, this.node_vars_paths
 			, this.text_vars_paths
@@ -53,6 +55,8 @@ var Ozenfant = function(str){
 			, []
 			, this.varname_pool
 			, this.if_else_tree
+			, []
+			, this.loop_pool	
 		);
 	}
 	this.state = {};
@@ -83,6 +87,7 @@ Ozenfant.prepare = (str) => {
 	struct.func = create_func(toFunc({children: struct.semantics}));
 	//console.log('Struct func', struct);
 	struct.if_else_tree = {str_to_func: {}, var_funcs: {}};
+	struct.loop_pool = {};
 	get_vars({children: struct.semantics, root: true}
 		, struct.node_vars_paths
 		, struct.text_vars_paths
@@ -92,6 +97,8 @@ Ozenfant.prepare = (str) => {
 		, []
 		, struct.varname_pool
 		, struct.if_else_tree
+		, []
+		, struct.loop_pool
 	);
 	
 	return struct;
@@ -109,15 +116,28 @@ var get_varname = (node) => {
 	return key;
 }
 
-var register_varname = (varname, varname_pool, if_else_deps, if_else_tree) => {
-	if(varname_pool.vars[varname]){
-		// already exists!
-		init_if_empty(varname_pool.var_aliases, varname, []);
-		var new_name = 'ololo@!@!#_' + varname + '_' + varname_pool.var_aliases[varname].length;
-		varname_pool.var_aliases[varname].push(new_name);
-		varname = new_name;
+var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool) => {
+	if(loops.length){
+		var last_loop = loop_pool[loops[loops.length - 1]];
+		init_if_empty(last_loop, 'vars', {});
+		if(last_loop.vars[varname]){
+			init_if_empty(last_loop, 'var_aliases', {}, varname, []);
+			var new_name = 'ololo@!@!#_' + varname + '_' + last_loop.var_aliases[varname].length;
+			last_loop.var_aliases[varname].push(new_name);
+			
+		} else {
+			last_loop.vars[varname] = true;
+		}
 	} else {
-		varname_pool.vars[varname] = true;
+		if(varname_pool.vars[varname]){
+			// already exists!
+			init_if_empty(varname_pool.var_aliases, varname, []);
+			var new_name = 'ololo@!@!#_' + varname + '_' + varname_pool.var_aliases[varname].length;
+			varname_pool.var_aliases[varname].push(new_name);
+			varname = new_name;
+		} else {
+			varname_pool.vars[varname] = true;
+		}
 	}
 	var deps = if_else_deps.length ? ('(' + if_else_deps.join(') && (') + ')') : false;
 	if(deps){
@@ -151,8 +171,35 @@ var get_partial_func = (node) => {
 	
 }
 
-var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps, varname_pool, if_else_tree) => {
-	//if_else_deps = [...if_else_deps];
+var register_loop = function(varname, level, pool){
+	var lp = {
+		name: varname,
+		level,
+	}
+	pool[varname] = lp;
+	return lp;
+}
+
+var register_path = (varname, path, pool, loop) => {
+	if(loop){
+		init_if_empty(loop, 'paths', {});
+		pool = loop.paths;
+	}
+	if(path.indexOf('_{}_') !== -1){
+		var pieces = path.split('_{}_');
+		pool[varname] = pieces[pieces.length - 1];
+	} else {
+		pool[varname] = path;
+	}
+}
+
+var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool, parent_has_loop) => {
+	if(!loops) debugger;
+	loops = [...loops];
+	var last_loop;
+	if(loops.length){
+		last_loop = loop_pool[loops[loops.length - 1]];
+	}
 	if(node.children){
 		var nodes_lag = 0;
 		var text_lag = 0;
@@ -166,7 +213,11 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 				} else {
 						++text_lag;
 				}
-				new_path = path + '/*[' + (Number(i) + 1 - nodes_lag) + ']';
+				if(parent_has_loop){
+					new_path = path + '/_{}_';
+				} else {
+					new_path = path + '/*[' + (Number(i) + 1 - nodes_lag) + ']';
+				}
 			}
 			if(zild.type && (
 					zild.type === 'ELSE' 
@@ -175,68 +226,68 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 					|| zild.type === 'NEW_ELSEIF'
 					|| zild.type === 'NEW_ELSE')){
 				if(zild.type === 'NEW_IF'){
-					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree);
+					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
 					resigtered_vars[varname] = true;
-					node_pool[varname] = new_path;
+					register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = get_partial_func(node);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.expr)
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
 					continue;
 				}
 				if(zild.type === 'NEW_ELSEIF' || zild.type === 'NEW_ELSE'){
 					var varname = get_varname(zild);
 					if(!resigtered_vars[varname]){
-						register_varname(varname, varname_pool, if_else_deps, if_else_tree);
+						register_varname(varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
 					}
 					types[varname] = get_partial_func(node);
-					node_pool[varname] = new_path;
+					register_path(varname, new_path, node_pool, last_loop);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.real_expr)
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
 					continue;
 				}
 				if(zild.type === 'ELSE'){
 					return;
 				}
 				if(zild.type === 'IF'){
-					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree);
-					node_pool[varname] = new_path;
+					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+					register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = {
 						type: 'IF',
 						struct: zild,
 						if_pool,
 						else_pool,
 					};
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
 					if(zild.else_children){
-						get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
+						get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
 					}
 				} else {
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_deps, varname_pool, if_else_tree);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
 				}
 			} else {
 				if(zild.varname !== undefined){
-					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree);
-					node_pool[varname] = new_path;
+					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+					register_path(varname, new_path, node_pool, last_loop);
 				}
 				if(zild.attrStyleVars){
 					for(let [varname, attrname] of zild.attrStyleVars){
-						varname = register_varname(varname, varname_pool, if_else_deps, if_else_tree);
-						node_pool[varname] = new_path;
+						varname = register_varname(varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+						register_path(varname, new_path, node_pool, last_loop);
 						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
 						types[varname] = {
 							type: as_type,
 							name: attrname,
 						}
 					}
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
+					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
 				} 
 				if(zild.quoted_str){
 					//console.log('str!', node.children[i].quoted_str);
 					zild.quoted_str.replace(text_var_regexp, (_, key) => {
 						var text_path = path + '/text()[' + (Number(i) + 1 - text_lag) + ']';
-						varname = register_varname(key, varname_pool, if_else_deps, if_else_tree);
+						varname = register_varname(key, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
 						if(!path_pool[text_path]){
 							path_pool[text_path] = zild.quoted_str;
 						}
@@ -244,7 +295,17 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 						//console.log('text key found', key, text_path);
 					})
 				} 
-				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree);
+				if(zild.loop){
+					let loopname = register_varname(zild.loop, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+					var loop = register_loop(loopname, loops.length, loop_pool);
+					register_path(loopname, new_path, node_pool, last_loop);
+					types[loopname] = {
+						type: 'LOOP',
+						loop,
+					}
+					loops.push(loopname);
+				}
+				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool, !!zild.loop);
 			}
 		}
 	}
@@ -629,7 +690,7 @@ Ozenfant.prototype.updateBindings = function(){
 Ozenfant.prototype.render = function(node, context = false){
 	this.root = node;
 	if(context){
-		this.state = context;
+		this.state = JSON.parse(JSON.stringify(context));
 	}
 	node.innerHTML = this.toHTML(this.state);
 	this.updateBindings();
@@ -674,10 +735,39 @@ Ozenfant.prototype._setVarVal = function(key, val){
 	if(val instanceof Object) return;
 	this.bindings[key].textContent = val;
 }
+Ozenfant.prototype._setValByPath = function(path, val, root_node){
+	document.evaluate(path, root_node, null, XPathResult.ANY_TYPE, null).iterateNext().innerHTML = val;
+}
+Ozenfant.prototype.updateLoopVals = function(loopname, val, binding){
+	var loop = this.loop_pool[loopname];
+	var prefix = new Array(loop.level + 2).join('.');
+	for(var k in val){
+		var varname = prefix + k;
+		if(loop.paths[varname]){
+			console.log('update loop val', k, val[k], loop.paths[varname]);
+			this._setValByPath(loop.paths[varname].substr(1), val[k], binding);
+		}
+	}
+}
+
+Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding){
+	for(var i in val){
+		if(old_val[i]){
+			this.updateLoopVals(loopname, val[i], binding.children[i]);
+		} else {
+			this.removeLoopItem(loopname, i, binding);
+		}
+	}
+}
 Ozenfant.prototype.set = function(key, val){
 	if(this.state[key] === val){
 		return; 
 	} 
+	if(val instanceof Object){
+		// we need to make deep copy
+		val = JSON.parse(JSON.stringify(val));
+	}
+	var old_val = this.state[key];
 	this.state[key] = val;
 	if(this.varname_pool.var_aliases[key]){
 		for(let k of this.varname_pool.var_aliases[key]){
@@ -729,6 +819,9 @@ Ozenfant.prototype.set = function(key, val){
 				break;
 				case 'STYLE':
 					this.bindings[key].style[this.var_types[key].name] = val;
+				break;
+				case 'LOOP':
+					this.setLoop(key, val, old_val, this.bindings[key])
 				break;
 				default:
 					var func;
