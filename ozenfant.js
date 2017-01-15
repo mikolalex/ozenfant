@@ -65,12 +65,16 @@ var Ozenfant = function(str){
 	this.getIfElseVarsIndex();
 };
 
-var create_func = (str, condition) => {
+var create_func = (str, condition, loop_level) => {
 	var body = "'" + str + "'";
 	if(condition){
 		body = condition + ' ? ' + body + ' : false';
 	}
-	return new Function('ctx', 'var res = []; var res2 = []; res.push(' + body + '); return res.join("");');
+	var args = 'ctx';
+	if(loop_level){
+		args += ', __loopvar' + loop_level;
+	}
+	return new Function(args, 'var res = []; var res2 = []; res.push(' + body + '); return res.join("");');
 }
 
 Ozenfant.prepare = (str) => {
@@ -117,27 +121,14 @@ var get_varname = (node) => {
 }
 
 var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool) => {
-	if(loops.length){
-		var last_loop = loop_pool[loops[loops.length - 1]];
-		init_if_empty(last_loop, 'vars', {});
-		if(last_loop.vars[varname]){
-			init_if_empty(last_loop, 'var_aliases', {}, varname, []);
-			var new_name = 'ololo@!@!#_' + varname + '_' + last_loop.var_aliases[varname].length;
-			last_loop.var_aliases[varname].push(new_name);
-			
-		} else {
-			last_loop.vars[varname] = true;
-		}
+	if(varname_pool.vars[varname]){
+		// already exists!
+		init_if_empty(varname_pool.var_aliases, varname, []);
+		var new_name = 'ololo@!@!#_' + varname + '_' + varname_pool.var_aliases[varname].length;
+		varname_pool.var_aliases[varname].push(new_name);
+		varname = new_name;
 	} else {
-		if(varname_pool.vars[varname]){
-			// already exists!
-			init_if_empty(varname_pool.var_aliases, varname, []);
-			var new_name = 'ololo@!@!#_' + varname + '_' + varname_pool.var_aliases[varname].length;
-			varname_pool.var_aliases[varname].push(new_name);
-			varname = new_name;
-		} else {
-			varname_pool.vars[varname] = true;
-		}
+		varname_pool.vars[varname] = true;
 	}
 	var deps = if_else_deps.length ? ('(' + if_else_deps.join(') && (') + ')') : false;
 	if(deps){
@@ -146,6 +137,11 @@ var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops
 		} else {
 			if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps] = new Function('ctx', 'return ' + deps);
 		}
+	}
+	if(loops.length){
+		var last_loop = loop_pool[loops[loops.length - 1]];
+		init_if_empty(last_loop, 'vars', {});
+		last_loop.vars[varname] = true;
 	}
 	return varname;
 }
@@ -301,6 +297,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 					register_path(loopname, new_path, node_pool, last_loop);
 					types[loopname] = {
 						type: 'LOOP',
+						func: get_partial_func(zild),
 						loop,
 					}
 					loops.push(loopname);
@@ -314,99 +311,6 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 var input_types = new Set(['text', 'submit', 'checkbox', 'radio']);
 
 var toHTML = function(node, context, parent_tag){
-	var indent = `
-` + new Array(node.level).join('	');
-	//indent = '';// !
-	var res1 = [], res2 = [], after = '';
-	if(node.type === 'ELSE'){
-		return '';
-	}
-	var childs = node.children;
-	if(node.type === 'IF'){
-		if(!context[node.varname]){
-			// "ELSE" part
-			if(node.else_children){
-				childs = node.else_children.children;
-			} else {
-				childs = [];
-			}
-		}
-	}
-	if(node.tagname || node.classnames || !parent_tag){
-		// it's a node
-		var tag;
-		if(node.tagname){
-			if(input_types.has(node.tagname)) {
-				node.assignments = node.assignments || [];
-				node.assignments.push(['type', node.tagname]);
-				tag = 'input';
-			} else {
-				tag = node.tagname;
-			}
-		} else {
-			switch(parent_tag){
-				case 'ol':
-				case 'ul':
-					tag = 'li';
-				break;
-				case 'tr':
-					tag = 'td';
-				break;
-				default:
-					tag = 'div';
-				break;
-			}
-		}
-		for(let child of childs){
-			res1.push(toHTML(child, context, tag));
-		}
-		if(parent_tag){
-			res2.push(indent + '<' + tag);
-			if(node.classnames && node.classnames.length > 1){
-				res2.push(' class="' + node.classnames.substr(1).replace(/\./g, " ") + '"');
-			}
-			if(node.assignments){
-				var styles = [];
-				for(let ass of node.assignments){
-					var [key, val] = ass;
-					if(val[0] === '$'){
-						// its variable, lets take its val from context
-						var real_key = val.length === 1 ? key : val.substr(1);
-						val = context[real_key] !== undefined ? context[real_key] : '';
-					}
-					if(is_attr(key)){
-						res2.push(' ' + key + '="' + val + '"');
-					} else {
-						styles.push(key + ': ' + val + ';');
-					}
-				}
-				if(styles.length){
-					res2.push(' style="' + styles.join('') + '"');
-				}
-			}
-			res2.push('>');
-			if(node.varname !== undefined && !node.type){
-				var key = get_varname(node);
-				res2.push(indent + '	' + (context[key] !== undefined ? context[key] : ''));
-			} else {
-				res2.push(res1.join(' '));
-			}
-			res2.push(indent + '</' + tag + '>');
-			return res2.join('');
-		}
-	} else {
-		// its var of text node
-		if(node.quoted_str){
-			return indent + node.quoted_str.replace(text_var_regexp, function(_, key){
-				//console.log('Found!', key, context[key]);
-				return context[key] !== undefined ? context[key] : '';
-			});
-		}
-		if(node.variable){
-			return indent + node.variable;
-		}
-	}
-	return res1.join(' ');
 }
 
 var getvar = (key) => {
@@ -460,6 +364,9 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 			pp = [];
 			break;
 		}
+	}
+	if(node.loop){
+		need_partial_func = true;
 	}
 	if(node.type === 'ELSE' || is_new_if(node)){
 		switch(node.type){
@@ -607,7 +514,8 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 				}
 			}
 		} else {
-			node.partial_func = create_func(childs_html);
+			console.log('create func', node.loop, loop_level);
+			node.partial_func = create_func(childs_html, false, loop_level);
 			if(pp){
 				for(let nd of pp){
 					nd.partial_func = node.partial_func;
@@ -738,24 +646,55 @@ Ozenfant.prototype._setVarVal = function(key, val){
 Ozenfant.prototype._setValByPath = function(path, val, root_node){
 	document.evaluate(path, root_node, null, XPathResult.ANY_TYPE, null).iterateNext().innerHTML = val;
 }
-Ozenfant.prototype.updateLoopVals = function(loopname, val, binding){
+Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding){
 	var loop = this.loop_pool[loopname];
 	var prefix = new Array(loop.level + 2).join('.');
 	for(var k in val){
+		if(val[k] === old_val[k]){
+			//console.log('skip', k);
+			continue;
+		}
 		var varname = prefix + k;
 		if(loop.paths[varname]){
-			console.log('update loop val', k, val[k], loop.paths[varname]);
-			this._setValByPath(loop.paths[varname].substr(1), val[k], binding);
+			//console.log('_____ update loop val', varname, val[k], old_val[k]);
+			if(this.var_types[varname]){
+				var nested_loopname = this.loop_pool[varname].name;
+				var nested_val = val[k];
+				var nested_binding = Ozenfant.xpOne(loop.paths[varname].substr(1), binding);
+				this.updateLoopVals(nested_loopname, nested_val, nested_binding);
+			} else {
+				this._setValByPath(loop.paths[varname].substr(1), val[k], binding);
+			}
 		}
 	}
+}
+
+Ozenfant.prototype.removeLoopItem = function(binding, i){
+	binding.children[i].remove();
+}
+Ozenfant.prototype.addLoopItems = function(loop, from, to, val, binding){
+	var res = [];
+	var func = this.var_types[loop].func;
+	for(var i = from; i<= to; ++i){
+		res.push(func(this.state, val[i]));
+	}
+	// !!! should be rewritten!
+	binding.innerHTML += res.join('');
 }
 
 Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding){
 	for(var i in val){
 		if(old_val[i]){
-			this.updateLoopVals(loopname, val[i], binding.children[i]);
+			this.updateLoopVals(loopname, val[i], old_val[i], binding.children[i]);
 		} else {
-			this.removeLoopItem(loopname, i, binding);
+			this.addLoopItems(loopname, i, val.length - 1, val, binding);
+			break;
+		}
+	}
+	++i;
+	if(old_val[i]){
+		for(;old_val[i];i++){
+			this.removeLoopItem(binding, i);
 		}
 	}
 }
