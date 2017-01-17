@@ -72,9 +72,12 @@ var create_func = (str, condition, loop_level) => {
 	}
 	var args = 'ctx';
 	if(loop_level){
-		args += ', __loopvar' + loop_level;
+		for(var c = 1; c <= loop_level; c++){
+			args += ', __loopvar' + c;
+		}
 	}
-	return new Function(args, 'var res = []; var res2 = []; res.push(' + body + '); return res.join("");');
+	const fbody = 'var res = []; var res2 = []; res.push(' + body + '); return res.join("");';
+	return new Function(args, fbody);
 }
 
 Ozenfant.prepare = (str) => {
@@ -223,10 +226,9 @@ var register_path = (varname, path, pool, loop) => {
 	}
 	if(path.indexOf('_{}_') !== -1){
 		var pieces = path.split('_{}_');
-		pool[varname] = pieces[pieces.length - 1];
-	} else {
-		pool[varname] = path;
+		path = pieces[pieces.length - 1];
 	}
+	pool[varname] = path;
 }
 
 var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool, parent_has_loop) => {
@@ -420,28 +422,31 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 			case 'NEW_IF':
 				//console.log('IF STACK', if_stack);
 				if_stack[node.level] = [toFuncVarname(node.varname), node.expr, []];
-				res1.push(indent + "' + (" + node.expr + " ? ('");
+				res1.push(indent + "'); if(" + node.expr + ") { res.push('");
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
-				res1.push(indent + "') : '' ) + '");
+				res1.push(`'); }
+res.push('`);
 			break;
 			case 'NEW_ELSEIF':
 				var [varname, expr, elifs] = if_stack[node.level];
 				if_stack[node.level][2].push(node.expr);
 				node.real_expr = node.expr + " && !(" + expr + ")";
-				res1.push(indent + "' + ((" + node.expr + " && !(" + expr + ")) ? ('");
+				res1.push(indent + "'); if(" + node.expr + " && !(" + expr + ")) { res.push('");
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
-				res1.push(indent + "') : '' ) + '");
+				res1.push(indent + `'); }
+res.push('`);
 			break;
 			case 'NEW_ELSE':
 				var [varname, expr, elifs] = if_stack[node.level];
 				node.varname = varname;
 				node.real_expr = "!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ")";
-				res1.push(indent + "' + (!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + ") ? ('");
+				res1.push(indent + "'); if(!(" + expr + "" + (elifs.length ? ' || ' + elifs.join(' || ') : '') + `)) { res.push('`);
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
-				res1.push(indent + "') : '' ) + '");
+				res1.push(indent + `'); }
+res.push('`);
 			break;
 		}
 	} else if (node.tagname || node.classnames || !parent_tag || node.type === 'IF'){
@@ -564,6 +569,18 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 		}
 	}
 	return res_final;
+}
+
+var trim_dots = (str) => {
+	var c = 0;
+	for(let i in str){
+		if(str[i] === '.') {
+			++c;
+		} else {
+			break;
+		}
+	}
+	return str.substr(c);;
 }
 
 Ozenfant.prototype.toHTML = function(context){
@@ -735,43 +752,66 @@ Ozenfant.prototype.eachLoopBinding = function(loop, cb){
 	var parent = loop.parent_loop;
 	var binding;
 	if(parent){
-		console.log('got parent', parent);
+		this.eachLoopBinding(parent, (bnd, val_arr) => {
+			var pth = parent.paths[loop.name];
+			binding = Ozenfant.xpOne(pth, bnd);
+			var llevel = get_level(loop.name);
+			var scope = val_arr[llevel][trim_dots(loop.name)];
+			for(let c in binding.children){
+				if(Number(c) != c) continue;
+				let child = binding.children[c];
+				cb(child, val_arr.concat(scope[c]), c);
+			}
+		})
+		return;
 	} else {
 		// its root
+		var val = this.state[loop.name];
 		binding = this.bindings[loop.name];
-	}
-	for(let child of binding.children){
-		cb(child);
+		for(let c in binding.children){
+			if(Number(c) != c) continue;
+			let child = binding.children[c];
+			cb(child, [val[c]], c);
+		}
 	}
 } 
 
-Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force){
+Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force, loop_context){
 	var binding;
+	if(key.indexOf('/') !== -1){
+		// @todo
+		return;
+	}
 	if(this.state[key] === val && !force){
 		return; 
 	} 
 	if(val instanceof Object){
 		// we need to make deep copy
-		val = JSON.parse(JSON.stringify(val));
+		try {
+			val = JSON.parse(JSON.stringify(val));
+		} catch(e) {
+			//let it be ;)
+		}
 	}
 	var old_val = loop ? old_data : this.state[key];
+	if(!force && key[0] !== '.'){
+		this.state[key] = val;
+	}
 	if(this.varname_pool.loop_var_links && this.varname_pool.loop_var_links[key] && !loop){
 		for(var cn in this.varname_pool.loop_var_links[key]){
 			var l_loop = this.varname_pool.loop_var_links[key][cn];
-			this.eachLoopBinding(l_loop, (node) => {
-				this.set(cn, val, l_loop, node, old_val, true);
-				//console.log('loop binding!', node);
+			this.eachLoopBinding(l_loop, (node, val, i) => {
+				this.set(cn, val, l_loop, node, old_val, true, val);
 			})
 		}
 	}
-	this.state[key] = val;
 	if(this.varname_pool.var_aliases[key]){
 		for(let k of this.varname_pool.var_aliases[key]){
-			this.set(k, val);
+			this.set(k, val, loop, loop_binding, old_data, true);
 		}
 	}
 	if(loop) {
-		binding = Ozenfant.xpOne(loop.paths[key].substr(1), loop_binding);
+		binding = Ozenfant.xpOne(loop.paths[key], loop_binding);
 	} else {
 		if(!this.bindings[key]){
 			return;
@@ -832,8 +872,11 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force)
 					if(this.var_types[key] instanceof Function){
 						func = this.var_types[key];
 					}
-					var html = func(this.state);
-					//console.log('run func', func, 'of', key, 'val', val, /*'with state', JSON.stringify(this.state),*/ 'if_else_deps____html', html, 'to', this);
+					var ctx = [this.state];
+					if(loop){
+						ctx = [this.state, ...loop_context];
+					}
+					var html = func.apply(null, ctx);
 					binding.innerHTML = html;
 					this.updateBindings();
 				break;
@@ -844,7 +887,9 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force)
 	}
 }
 Ozenfant.xpOne = (path, node = document) => {
-	//console.log('NODE', node);
+	if(node !== document && path[0] === '/'){
+		path = path.substr(1);
+	}
 	return document.evaluate(path, node, null, XPathResult.ANY_TYPE, null).iterateNext(); 
 }
 
