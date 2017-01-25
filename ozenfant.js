@@ -46,9 +46,9 @@ var Ozenfant = function(str){
 		this.func = create_func(toFunc({children: this.struct.semantics}));
 		this.if_else_tree = {str_to_func: {}, var_funcs: {}};
 		this.loop_pool = {};
-		get_vars({children: this.struct.semantics, root: true}
-			, this.node_vars_paths
-			, this.text_vars_paths
+		this.get_vars({children: this.struct.semantics, root: true}
+			//, this.node_vars_paths
+			//, this.text_vars_paths
 			, this.nodes_vars
 			, '.'
 			, this.var_types
@@ -81,8 +81,8 @@ var create_func = (str, condition, loop_level) => {
 }
 
 Ozenfant.prepare = (str) => {
-	var struct = parser(str + `
-`);
+	var struct = Object.assign(Object.create(Ozenfant.prototype, {}), parser(str + `
+`));
 	struct.node_vars_paths = {};
 	struct.text_vars_paths = {};
 	struct.nodes_vars = {};
@@ -95,9 +95,10 @@ Ozenfant.prepare = (str) => {
 	//console.log('Struct func', struct);
 	struct.if_else_tree = {str_to_func: {}, var_funcs: {}};
 	struct.loop_pool = {};
-	get_vars({children: struct.semantics, root: true}
-		, struct.node_vars_paths
-		, struct.text_vars_paths
+	struct.get_vars(
+		{children: struct.semantics, root: true}
+		//, struct.node_vars_paths
+		//, struct.text_vars_paths
 		, struct.nodes_vars
 		, '.'
 		, struct.var_types
@@ -231,7 +232,9 @@ var register_path = (varname, path, pool, loop) => {
 	pool[varname] = path;
 }
 
-var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool, parent_has_loop) => {
+Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool, parent_has_loop){
+	var node_pool = this.node_vars_paths;
+	var text_pool = this.text_vars_paths
 	if(!loops) debugger;
 	loops = [...loops];
 	var last_loop;
@@ -270,7 +273,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 					types[varname] = get_partial_func(node);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.expr)
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
 					continue;
 				}
 				if(zild.type === 'NEW_ELSEIF' || zild.type === 'NEW_ELSE'){
@@ -282,7 +285,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 					register_path(varname, new_path, node_pool, last_loop);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.real_expr)
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
 					continue;
 				}
 				if(zild.type === 'ELSE'){
@@ -297,12 +300,12 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 						if_pool,
 						else_pool,
 					};
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
 					if(zild.else_children){
-						get_vars(zild.else_children, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
+						this.get_vars(zild.else_children, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
 					}
 				} else {
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, path_pool, new_path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
 				}
 			} else {
 				if(zild.varname !== undefined){
@@ -319,7 +322,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 							name: attrname,
 						}
 					}
-					get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
 				} 
 				if(zild.quoted_str){
 					//console.log('str!', node.children[i].quoted_str);
@@ -344,7 +347,7 @@ var get_vars = (node, node_pool, text_pool, path_pool, path, types, if_else_deps
 					}
 					loops.push(loopname);
 				}
-				get_vars(zild, node_pool, text_pool, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool, !!zild.loop);
+				this.get_vars(zild, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool, !!zild.loop);
 			}
 		}
 	}
@@ -590,8 +593,7 @@ Ozenfant.prototype.toHTML = function(context){
 		context = {};
 	}
 	if(!this.struct.func){
-		var func_body = " return '" + toFunc({children: this.struct.semantics, root: true}) + "';";
-		this.struct.func = new Function('ctx', func_body);
+		this.struct.func = create_func(toFunc({children: this.struct.semantics, root: true}));
 	}
 	var a = this.struct.func(context);
 	//var a = toHTML({children: this.struct.semantics}, context = context);

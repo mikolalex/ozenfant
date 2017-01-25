@@ -255,7 +255,7 @@ module.exports = {
 						break;
 						case 'new_if':
 							var chars = child.chars;
-							res.varname = chars.match(/\$([^\s]*)/)[1];
+							res.varname = chars.match(/\$([A-Za-z0-9\_]*)/)[1];
 							res.expr = chars.replace(/\?\s?/, '').replace('$' + res.varname, 'ctx.' + res.varname);
 							res.type = child.type.toUpperCase();
 						break;

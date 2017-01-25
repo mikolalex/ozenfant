@@ -90,7 +90,7 @@ var exp_struct = {
 	}]
 }
 
-
+//*
 describe('Amadee Ozenfant', function () {
 	var do_in_tree = (node, cb, child_key = 'children') => {
 		if(!node) return;
@@ -237,76 +237,130 @@ describe('Amadee Ozenfant', function () {
 		//console.log('RES', tmpl.toHTML());
 	})
 	it('testing nested loops', () => {
-		var tmpl = `
-			h1.$title
-			ul.people{$people}
-				li
-					.name$.name
-					.surname$.surname
-					.company$
-					.relatives
-						select{$.relatives}
-							option(value: $.type, data-name: $..$name).$.name
+		var tmpl = Ozenfant.prepare(`
+		.{$companies}
+			.
+				h1.$.title
+				ul.people{$.people}
+					li
+						.name$..name
+						.surname$..surname
+						.company$
+						.relatives
+							? !$display_list
+								.company$.title
+								select{$..relatives}
+									option.$...name(value: $...type, data-name: $..name)
+							:
+								ul{$..relatives}
+									li.$...name(data-value: $...type, data-name: $..name)
 								
 		
-		`;
-		tmpl = new Ozenfant(tmpl, {
+		`);
+		console.log('Tmpl', tmpl);
+		tmpl = new Ozenfant(tmpl);
+		var rnode = $(".test-nested-loop").get(0);
+		var people = [
+			{
+				name: 'Michael',
+				surname: 'Petrenko',
+				relatives: [
+					{
+						type: 'sister',
+						name: 'Katherine Kovalchuk'
+					},
+					{
+						type: 'father',
+						name: 'Opanas Petrenko'
+					},
+					{
+						type: 'mother',
+						name: 'Hrystya Petrenko'
+					},
+				]
+			},
+			{
+				name: 'John',
+				surname: 'Kovalchuk',
+				relatives: [
+					{
+						type: 'son',
+						name: 'Peter Kovalchuk'
+					},
+					{
+						type: 'father',
+						name: 'Petro Kovalchuk'
+					},
+				]
+			},
+			{
+				name: 'Katherine',
+				surname: 'Petrenko',
+				relatives: [
+					{
+						type: 'husband',
+						name: 'John Kovalchuk'
+					},
+					{
+						type: 'father',
+						name: 'Opanas Petrenko'
+					},
+					{
+						type: 'mother',
+						name: 'Hrystya Petrenko'
+					},
+				]
+			},
+		];
+		tmpl.render(rnode, {companies: [{
 			title: 'People\'s list',
-			people: [
+			company: 'RSTSh studio',
+			people,
+		}]});
+		people[2].surname = 'Kovalchuk';
+		console.log('_________________');
+		tmpl.set('companies[0]/people', people);
+		people.pop();
+		tmpl.set('companies[0]/people', people);
+		people.push({
+			name: 'Katherine',
+			surname: 'Petrenko',
+			relatives: [
 				{
-					name: 'Michael',
-					surname: 'Petrenko',
-					relatives: [
-						{
-							type: 'sister',
-							name: 'Katherine Kovalchuk'
-						},
-						{
-							type: 'father',
-							name: 'Opanas Petrenko'
-						},
-						{
-							type: 'mother',
-							name: 'Hrystya Petrenko'
-						},
-					]
+					type: 'husband',
+					name: 'John Kovalchuk'
 				},
 				{
-					name: 'John',
-					surname: 'Kovalchuk',
-					relatives: [
-						{
-							type: 'son',
-							name: 'Peter Kovalchuk'
-						},
-						{
-							type: 'father',
-							name: 'Petro Kovalchuk'
-						},
-					]
+					type: 'father',
+					name: 'Opanas Petrenko'
 				},
 				{
-					name: 'Katherine',
-					surname: 'Kovalchuk',
-					relatives: [
-						{
-							type: 'husband',
-							name: 'John Kovalchuk'
-						},
-						{
-							type: 'father',
-							name: 'Ivan Netudyhata'
-						},
-						{
-							type: 'mother',
-							name: 'Ganna Netudyhata'
-						},
-					]
+					type: 'mother',
+					name: 'Hrystya Petrenko'
 				},
-			],
+			]
 		});
-		tmpl.render($(".test-nested-loop").get(0));
-		//console.log('RES', tmpl.toHTML());
+		people.push({
+			name: 'Joanne',
+			surname: 'Petrenko',
+			relatives: [
+				{
+					type: 'father',
+					name: 'Opanas Petrenko'
+				},
+				{
+					type: 'mother',
+					name: 'Hrystya Petrenko'
+				},
+			]
+		});
+		tmpl.set('companies[0]/people', people);
+		tmpl.set('companies[0]/company', 'Brainstorm-IT');
+		setTimeout(() => {
+			tmpl.set('display_list', true);
+		}, 500);
+		///console.log('RES', tmpl.toHTML());
 	})
 })
+//*/
 
