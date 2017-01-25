@@ -236,7 +236,6 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 	var node_pool = this.node_vars_paths;
 	var text_pool = this.text_vars_paths;
 	var path_pool = this.nodes_vars;
-	loops = [...loops];
 	var last_loop;
 	if(loops.length){
 		last_loop = this.loop_pool[loops[loops.length - 1]];
@@ -336,6 +335,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 						//console.log('text key found', key, text_path);
 					})
 				} 
+				var new_loops = [...loops];
 				if(zild.loop){
 					let loopname = register_varname(zild.loop, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					var loop = register_loop(loopname, loops.length, this.loop_pool, last_loop);
@@ -345,9 +345,9 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 						func: get_partial_func(zild),
 						loop,
 					}
-					loops.push(loopname);
+					new_loops.push(loopname);
 				}
-				this.get_vars(zild, new_path, types, [...if_else_deps], loops, !!zild.loop);
+				this.get_vars(zild, new_path, types, [...if_else_deps], new_loops, !!zild.loop);
 			}
 		}
 	}
@@ -382,10 +382,14 @@ var toFuncVarname = (a) => {
 			break;
 		}
 	}
+	var varname;
 	if(dot_counter){
-		a = '__loopvar' + dot_counter + '.' + a.substr(dot_counter);
+		varname = a.substr(dot_counter);
+		varname = varname.length ? '.' + varname : '';
+		a = '__loopvar' + dot_counter + varname ;
 	} else {
-		a = 'ctx.' + a;
+		a = a.length ? '.' + a : '';
+		a = 'ctx' + a;
 	}
 	return a;
 }
