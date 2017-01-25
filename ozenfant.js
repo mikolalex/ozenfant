@@ -49,14 +49,14 @@ var Ozenfant = function(str){
 		this.get_vars({children: this.struct.semantics, root: true}
 			//, this.node_vars_paths
 			//, this.text_vars_paths
-			, this.nodes_vars
+			//, this.nodes_vars
 			, '.'
 			, this.var_types
 			, []
-			, this.varname_pool
-			, this.if_else_tree
+			//, this.varname_pool
+			//, this.if_else_tree
 			, []
-			, this.loop_pool	
+			//, this.loop_pool	
 		);
 	}
 	this.state = {};
@@ -99,14 +99,14 @@ Ozenfant.prepare = (str) => {
 		{children: struct.semantics, root: true}
 		//, struct.node_vars_paths
 		//, struct.text_vars_paths
-		, struct.nodes_vars
+		//, struct.nodes_vars
 		, '.'
 		, struct.var_types
 		, []
-		, struct.varname_pool
-		, struct.if_else_tree
+		//, struct.varname_pool
+		//, struct.if_else_tree
 		, []
-		, struct.loop_pool
+		//, struct.loop_pool
 	);
 	
 	return struct;
@@ -232,14 +232,14 @@ var register_path = (varname, path, pool, loop) => {
 	pool[varname] = path;
 }
 
-Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool, parent_has_loop){
+Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, parent_has_loop){
 	var node_pool = this.node_vars_paths;
-	var text_pool = this.text_vars_paths
-	if(!loops) debugger;
+	var text_pool = this.text_vars_paths;
+	var path_pool = this.nodes_vars;
 	loops = [...loops];
 	var last_loop;
 	if(loops.length){
-		last_loop = loop_pool[loops[loops.length - 1]];
+		last_loop = this.loop_pool[loops[loops.length - 1]];
 	}
 	if(node.children){
 		var nodes_lag = 0;
@@ -267,32 +267,32 @@ Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_dep
 					|| zild.type === 'NEW_ELSEIF'
 					|| zild.type === 'NEW_ELSE')){
 				if(zild.type === 'NEW_IF'){
-					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					resigtered_vars[varname] = true;
 					register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = get_partial_func(node);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.expr)
-					this.get_vars(zild, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, new_path, types, my_if_else_deps, loops);
 					continue;
 				}
 				if(zild.type === 'NEW_ELSEIF' || zild.type === 'NEW_ELSE'){
 					var varname = get_varname(zild);
 					if(!resigtered_vars[varname]){
-						register_varname(varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+						register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					}
 					types[varname] = get_partial_func(node);
 					register_path(varname, new_path, node_pool, last_loop);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.real_expr)
-					this.get_vars(zild, path_pool, new_path, types, my_if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, new_path, types, my_if_else_deps, loops);
 					continue;
 				}
 				if(zild.type === 'ELSE'){
 					return;
 				}
 				if(zild.type === 'IF'){
-					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = {
 						type: 'IF',
@@ -300,21 +300,21 @@ Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_dep
 						if_pool,
 						else_pool,
 					};
-					this.get_vars(zild, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, new_path, types, [...if_else_deps], loops);
 					if(zild.else_children){
-						this.get_vars(zild.else_children, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
+						this.get_vars(zild.else_children, new_path, types, [...if_else_deps], loops);
 					}
 				} else {
-					this.get_vars(zild, path_pool, new_path, types, if_else_deps, varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, new_path, types, if_else_deps, loops);
 				}
 			} else {
 				if(zild.varname !== undefined){
-					var varname = register_varname(get_varname(zild), varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					register_path(varname, new_path, node_pool, last_loop);
 				}
 				if(zild.attrStyleVars){
 					for(let [varname, attrname] of zild.attrStyleVars){
-						varname = register_varname(varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+						varname = register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 						register_path(varname, new_path, node_pool, last_loop);
 						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
 						types[varname] = {
@@ -322,13 +322,13 @@ Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_dep
 							name: attrname,
 						}
 					}
-					this.get_vars(zild, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool);
+					this.get_vars(zild, new_path, types, [...if_else_deps], loops);
 				} 
 				if(zild.quoted_str){
 					//console.log('str!', node.children[i].quoted_str);
 					zild.quoted_str.replace(text_var_regexp, (_, key) => {
 						var text_path = path + '/text()[' + (Number(i) + 1 - text_lag) + ']';
-						varname = register_varname(key, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
+						varname = register_varname(key, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 						if(!path_pool[text_path]){
 							path_pool[text_path] = zild.quoted_str;
 						}
@@ -337,8 +337,8 @@ Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_dep
 					})
 				} 
 				if(zild.loop){
-					let loopname = register_varname(zild.loop, varname_pool, if_else_deps, if_else_tree, loops, loop_pool);
-					var loop = register_loop(loopname, loops.length, loop_pool, last_loop);
+					let loopname = register_varname(zild.loop, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+					var loop = register_loop(loopname, loops.length, this.loop_pool, last_loop);
 					register_path(loopname, new_path, node_pool, last_loop);
 					types[loopname] = {
 						type: 'LOOP',
@@ -347,7 +347,7 @@ Ozenfant.prototype.get_vars = function(node, path_pool, path, types, if_else_dep
 					}
 					loops.push(loopname);
 				}
-				this.get_vars(zild, path_pool, new_path, types, [...if_else_deps], varname_pool, if_else_tree, loops, loop_pool, !!zild.loop);
+				this.get_vars(zild, new_path, types, [...if_else_deps], loops, !!zild.loop);
 			}
 		}
 	}
