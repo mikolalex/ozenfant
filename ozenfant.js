@@ -32,7 +32,9 @@ var Ozenfant = function(str){
 		this.varname_pool = this.struct.varname_pool;
 		this.if_else_tree = this.struct.if_else_tree;
 		this.loop_pool = this.struct.loop_pool;
+		this.str = this.struct.str;
 	} else {
+		this.str = str;
 		this.struct = parser(str + `
 `);
 		this.node_vars_paths = {};
@@ -95,6 +97,7 @@ Ozenfant.prepare = (str) => {
 	//console.log('Struct func', struct);
 	struct.if_else_tree = {str_to_func: {}, var_funcs: {}};
 	struct.loop_pool = {};
+	struct.str = str;
 	struct.get_vars(
 		{children: struct.semantics, root: true}
 		//, struct.node_vars_paths
@@ -116,7 +119,7 @@ var get_varname = (node) => {
 	var key = node.varname;
 	if(!key.length){
 		if(node.classnames){
-			key = node.classnames.substr(1).split('.')[0];
+			key = node.classnames.substr(1).split('.').pop();
 		} else {
 			console.warn('Incorrect statement: variable without name and default class!');
 		}
@@ -220,7 +223,12 @@ var register_loop = function(varname, level, pool, parent_loop){
 	return lp;
 }
 
-var register_path = (varname, path, pool, loop) => {
+var fix_path = (path) => {
+	return path.replace('./*[1]', '.');
+}
+
+
+Ozenfant.prototype.register_path = function(varname, path, pool, loop){
 	if(loop){
 		init_if_empty(loop, 'paths', {});
 		pool = loop.paths;
@@ -228,6 +236,11 @@ var register_path = (varname, path, pool, loop) => {
 	if(path.indexOf('_{}_') !== -1){
 		var pieces = path.split('_{}_');
 		path = pieces[pieces.length - 1];
+	}
+	if(path.indexOf('./*[1]') !== 0 && path.length){
+		console.error('Template should have only one root node! Given', this.str);
+	} else {
+		path = fix_path(path);
 	}
 	pool[varname] = path;
 }
@@ -268,7 +281,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				if(zild.type === 'NEW_IF'){
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					resigtered_vars[varname] = true;
-					register_path(varname, new_path, node_pool, last_loop);
+					this.register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = get_partial_func(node);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.expr)
@@ -281,7 +294,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 						register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					}
 					types[varname] = get_partial_func(node);
-					register_path(varname, new_path, node_pool, last_loop);
+					this.register_path(varname, new_path, node_pool, last_loop);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.real_expr)
 					this.get_vars(zild, new_path, types, my_if_else_deps, loops);
@@ -292,7 +305,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				}
 				if(zild.type === 'IF'){
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
-					register_path(varname, new_path, node_pool, last_loop);
+					this.register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = {
 						type: 'IF',
 						struct: zild,
@@ -309,12 +322,12 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 			} else {
 				if(zild.varname !== undefined){
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
-					register_path(varname, new_path, node_pool, last_loop);
+					this.register_path(varname, new_path, node_pool, last_loop);
 				}
 				if(zild.attrStyleVars){
 					for(let [varname, attrname] of zild.attrStyleVars){
 						varname = register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
-						register_path(varname, new_path, node_pool, last_loop);
+						this.register_path(varname, new_path, node_pool, last_loop);
 						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
 						types[varname] = {
 							type: as_type,
@@ -326,7 +339,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				if(zild.quoted_str){
 					//console.log('str!', node.children[i].quoted_str);
 					zild.quoted_str.replace(text_var_regexp, (_, key) => {
-						var text_path = path + '/text()[' + (Number(i) + 1 - text_lag) + ']';
+						var text_path = fix_path(path + '/text()[' + (Number(i) + 1 - text_lag) + ']');
 						varname = register_varname(key, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 						if(!path_pool[text_path]){
 							path_pool[text_path] = zild.quoted_str;
@@ -339,7 +352,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				if(zild.loop){
 					let loopname = register_varname(zild.loop, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 					var loop = register_loop(loopname, loops.length, this.loop_pool, last_loop);
-					register_path(loopname, new_path, node_pool, last_loop);
+					this.register_path(loopname, new_path, node_pool, last_loop);
 					types[loopname] = {
 						type: 'LOOP',
 						func: get_partial_func(zild),
@@ -648,7 +661,7 @@ Ozenfant.prototype.updateBindings = function(){
 		}
 		this.bindings[varname] = this.searchByPath(this.node_vars_paths[varname]);
 		if(!this.bindings[varname]){
-			//console.warn('No node found for var', varname, 'in path:', this.node_vars_paths[varname], 'in context', this.root, ', context', this.state);
+			console.warn('No node found for var', varname, 'in path:', this.node_vars_paths[varname], 'in context', this.root, ', context', this.state);
 		}
 	}
 	for(let varname in this.text_vars_paths){
@@ -659,11 +672,11 @@ Ozenfant.prototype.updateBindings = function(){
 	}
 }
 Ozenfant.prototype.render = function(node, context = false){
-	this.root = node;
 	if(context){
 		this.state = JSON.parse(JSON.stringify(context));
 	}
 	node.innerHTML = this.toHTML(this.state);
+	this.setRoot(node);
 	this.updateBindings();
 }
 Ozenfant.prototype.getTokenStruct = function(node, level = 1){
@@ -688,8 +701,12 @@ Ozenfant.prototype.getHTML = function(context = false){
 	}
 	return this.toHTML(this.state);
 }
-Ozenfant.prototype.setRoot = function(node){
+Ozenfant.prototype.setFirstNode = function(node){
 	this.root = node;
+	return this;
+}
+Ozenfant.prototype.setRoot = function(node){
+	this.root = node.children[0];
 	return this;
 }
 Ozenfant.prototype._setVarVal = function(key, val, binding){
