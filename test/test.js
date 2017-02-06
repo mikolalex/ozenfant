@@ -276,7 +276,6 @@ describe('Amadee Ozenfant', function () {
 								
 		
 		`);
-		console.log('Tmpl', tmpl);
 		tmpl = new Ozenfant(tmpl);
 		var root = $(".test-nested-loop");
 		var rnode = root.get(0);
@@ -341,19 +340,18 @@ describe('Amadee Ozenfant', function () {
 			}],
 			display_people: true,
 		});
-		
+		//console.log('Tmpl', tmpl);
 		assert.equal(root.find('li').length, 3);
-		console.log(root.find('li:nth-child(2) .surname').html().trim());
 		
-		people[2].surname = 'Kovalchuk';
-		tmpl.set('companies[0]/people', people);
+		var ntd = 'Netudykhata';
+		people[2].surname = ntd;
+		tmpl.set('companies[0]/people[2]', people[2]);
 		
-		console.log(root.find('li:nth-child(2) .surname').html().trim());
+		assert.equal(root.find('li:nth-child(3) .surname').html().trim(), ntd);
 		return;
 		
 		people.pop();
 		tmpl.set('companies[0]/people', people);
-		
 		
 		people.push({
 			name: 'Katherine',

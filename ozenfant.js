@@ -15,6 +15,10 @@ var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
 	return obj;
 }
 
+var last = (arr) => {
+	return arr[arr.length - 1];
+}
+
 var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type', 'value'])
 var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
@@ -172,7 +176,8 @@ var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops
 					break;
 				} else {
 					if(curr_loop.level == var_level){
-						init_if_empty(curr_loop, 'subordinary_loop_vars', {}, original_varname, last_loop);
+						var vrkey = original_varname.indexOf('.') !== - 1 ? last(original_varname.split('.')) : original_varname;
+						init_if_empty(curr_loop, 'subordinary_loop_vars', {}, vrkey, last_loop);
 						break;
 					}
 					curr_loop = curr_loop.parent_loop;
@@ -275,9 +280,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				}
 			}
 			if(zild.type && (
-					zild.type === 'ELSE' 
-					|| zild.type === 'IF'
-					|| zild.type === 'NEW_IF'
+					zild.type === 'NEW_IF'
 					|| zild.type === 'NEW_ELSEIF'
 					|| zild.type === 'NEW_ELSE')){
 				if(zild.type === 'NEW_IF'){
@@ -302,25 +305,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					this.get_vars(zild, new_path, types, my_if_else_deps, loops);
 					continue;
 				}
-				if(zild.type === 'ELSE'){
-					return;
-				}
-				if(zild.type === 'IF'){
-					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
-					this.register_path(varname, new_path, node_pool, last_loop);
-					types[varname] = {
-						type: 'IF',
-						struct: zild,
-						if_pool,
-						else_pool,
-					};
-					this.get_vars(zild, new_path, types, [...if_else_deps], loops);
-					if(zild.else_children){
-						this.get_vars(zild.else_children, new_path, types, [...if_else_deps], loops);
-					}
-				} else {
-					this.get_vars(zild, new_path, types, if_else_deps, loops);
-				}
+				this.get_vars(zild, new_path, types, if_else_deps, loops);
 			} else {
 				if(zild.varname !== undefined){
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
@@ -432,15 +417,8 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 	if(node.loop){
 		need_partial_func = true;
 	}
-	if(node.type === 'ELSE' || is_new_if(node)){
+	if(is_new_if(node)){
 		switch(node.type){
-			case 'ELSE':
-				res1.push(indent + "' + (!ctx." + toFuncVarname(node.varname) + " ? ('");
-				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
-				res1.push(childs_html);
-				res1.push(indent + "') : '' ) + '");
-				res1.push(node.after);
-			break;
 			case 'NEW_IF':
 				//console.log('IF STACK', if_stack);
 				if_stack[node.level] = [toFuncVarname(node.varname), node.expr, []];
@@ -471,7 +449,7 @@ res.push('`);
 res.push('`);
 			break;
 		}
-	} else if (node.tagname || node.classnames || !parent_tag || node.type === 'IF'){
+	} else if (node.tagname || node.classnames || !parent_tag){
 		// it's a node
 		var tag;
 		if(node.tagname){
@@ -496,20 +474,8 @@ res.push('`);
 				break;
 			}
 		}
-		
-		if(node.type === 'IF'){
-			if(node.else_children){
-				node.else_children.varname = node.varname;
-			}
-			res1.push(indent + "' + (ctx." + node.varname + " ? ('");
-			for(let child of childs){
-				res1.push(toFunc(child, tag, if_stack, pp, loop_level));
-			}
-			res1.push(indent + "') : '' ) + '");
-		} else {
-			childs_html = get_children_html(childs, tag, if_stack, pp, loop_level);
-			res1.push(childs_html);
-		}
+		childs_html = get_children_html(childs, tag, if_stack, pp, loop_level);
+		res1.push(childs_html);
 		if(parent_tag){
 			res2.push(indent + '<' + tag);
 			if(node.classnames && node.classnames.length > 1){
@@ -555,11 +521,7 @@ res.push('`);
 					res2.push(res1.join(' '));
 				}
 			}
-			if(node.type === 'IF' && node.else_children){
-				node.else_children.after = indent + '</' + tag + '>';
-			} else {
-				res2.push(indent + '</' + tag + '>');
-			}
+			res2.push(indent + '</' + tag + '>');
 			res_final = res2.join('');
 		}
 	} else {
@@ -806,10 +768,87 @@ Ozenfant.prototype.eachLoopBinding = function(loop, cb){
 	}
 } 
 
+Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, level = 0){
+	var pth = path.split('/');
+	var first = pth[0].match(/([^\[]*)\[([^\]]*)\]/);
+	if(!first){
+		var keyname = new Array(level + 1).join('.') + pth[0];
+		var binding = Ozenfant.xpOne(parent_loop.paths[keyname], el);
+		// @TODO!
+		return;
+	}
+	var loopname = new Array(level + 1).join('.') + first[1];
+	var index = first[2];
+	var loop = this.loop_pool[loopname];
+	var path_pool = parent_loop === this ? this.node_vars_paths : parent_loop.paths;
+	var loop_binding = Ozenfant.xpOne(path_pool[loopname], el);
+	var bnd = loop_binding.children[index];
+	var rest = pth.slice(1);
+	if(rest.length){
+		var new_context = last(context)[loopname][index];
+		this.rec_set(bnd, loop, rest.join('/'), val, context.concat(new_context), ++level);
+	} else {
+		var new_context = last(context)[first[1]][index];
+		if(new_context){
+			// already exists
+			this.updateLoopVals(loopname, val, new_context, bnd);
+		} else {
+			// @todO!
+			//this.addLoopItems(loopname, index, index, val, binding);
+		}
+		//console.log('FINAL', bnd, val, new_context);
+	}
+}
+
+Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_context) {
+	if(this.nodes_vars[this.text_vars_paths[key]]){
+		var template = this.nodes_vars[this.text_vars_paths[key]];
+		//console.log('template!', template);
+		var new_str = template.replace(text_var_regexp, (_, key) => {
+			return this.state[key];
+		});
+		this._setVarVal(key, new_str, binding);
+		binding.innerHTML = new_str;
+	} else {
+		if(this.var_types[key]){
+			switch(this.var_types[key].type){
+				case 'ATTR':
+					binding.setAttribute(this.var_types[key].name, val);
+				break;
+				case 'STYLE':
+					binding.style[this.var_types[key].name] = val;
+				break;
+				case 'LOOP':
+					this.setLoop(key, val, old_val, binding)
+				break;
+				default:
+					var func;
+					if(this.var_types[key] === 'USE_ROOT_FUNC'){
+						func = this.struct.func;
+					}
+					if(this.var_types[key] instanceof Function){
+						func = this.var_types[key];
+					}
+					var ctx = [this.state];
+					if(loop){
+						ctx = [this.state, ...loop_context];
+					}
+					var html = func.apply(null, ctx);
+					binding.innerHTML = html;
+					this.updateBindings();
+				break;
+			}
+		} else {
+			this._setVarVal(key, val, binding);
+		}
+	}
+}
+
 Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force, loop_context){
 	var binding;
 	if(key.indexOf('/') !== -1){
 		// @todo
+		this.rec_set(this.root, this, key, val, [this.state]);
 		return;
 	}
 	if(this.state[key] === val && !force){
@@ -857,64 +896,7 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force,
 			return;
 		}
 	}
-	if(this.nodes_vars[this.text_vars_paths[key]]){
-		var template = this.nodes_vars[this.text_vars_paths[key]];
-		//console.log('template!', template);
-		var new_str = template.replace(text_var_regexp, (_, key) => {
-			return this.state[key];
-		});
-		this._setVarVal(key, new_str, binding);
-		binding.innerHTML = new_str;
-	} else {
-		if(this.var_types[key]){
-			switch(this.var_types[key].type){
-				case 'IF':
-					var val;
-					if(val){
-						var struct = this.var_types[key].struct.children;
-					} else {
-						if(this.var_types[key].struct.else_children){
-							var struct = this.var_types[key].struct.else_children.children;
-						} else {
-							this.updateBindings();
-							return;
-						}
-					}
-					var html = toHTML({children: struct}, this.state);
-					binding.innerHTML = html;
-					// @todo should be optimized! update bindings only for dependent vars!
-					this.updateBindings();
-				break;
-				case 'ATTR':
-					binding.setAttribute(this.var_types[key].name, val);
-				break;
-				case 'STYLE':
-					binding.style[this.var_types[key].name] = val;
-				break;
-				case 'LOOP':
-					this.setLoop(key, val, old_val, binding)
-				break;
-				default:
-					var func;
-					if(this.var_types[key] === 'USE_ROOT_FUNC'){
-						func = this.struct.func;
-					}
-					if(this.var_types[key] instanceof Function){
-						func = this.var_types[key];
-					}
-					var ctx = [this.state];
-					if(loop){
-						ctx = [this.state, ...loop_context];
-					}
-					var html = func.apply(null, ctx);
-					binding.innerHTML = html;
-					this.updateBindings();
-				break;
-			}
-		} else {
-			this._setVarVal(key, val, binding);
-		}
-	}
+	this.__set(key, val, old_val, binding, loop, loop_context);
 }
 Ozenfant.xpOne = (path, node = document) => {
 	if(node !== document && path[0] === '/'){
