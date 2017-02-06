@@ -223,8 +223,22 @@ module.exports = {
 							continue;
 						}
 					}
-					//console.log('putting', child, put_to, 'to', last_of_level[put_to]);
-					last_of_level[put_to].children.push(child);
+					// way back
+					for(var y = i; y >= 0; y--){
+						if(che_results[y].level < lvl){
+							//console.log('PUT TO', che_results[y], che_results[y].level);
+							break;
+						}
+					}
+					var parent1 = last_of_level[put_to];
+					var parent2 = che_results[y];
+					if(!che_results[y]){
+						parent2 = res;
+					}
+					if(parent1 !== parent2){
+						//console.log('o-ow', parent1, parent2, child);
+					}
+					parent2.children.push(child);
 					last_of_level[lvl] = child;
 					if(lvl + 1 < max_level){
 						//console.log('lvl', lvl+1, max_level);

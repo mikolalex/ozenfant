@@ -233,12 +233,14 @@ Ozenfant.prototype.register_path = function(varname, path, pool, loop){
 		init_if_empty(loop, 'paths', {});
 		pool = loop.paths;
 	}
+	var has_loops = false;
 	if(path.indexOf('_{}_') !== -1){
 		var pieces = path.split('_{}_');
+		has_loops = true;
 		path = pieces[pieces.length - 1];
 	}
-	if(path.indexOf('./*[1]') !== 0 && path.length){
-		console.error('Template should have only one root node! Given', this.str);
+	if(path.indexOf('./*[1]') !== 0 && (!has_loops) && path.length){
+		console.error('Template should have only one root node! Given', path.indexOf('./*[1]'), path, this.str);
 	} else {
 		path = fix_path(path);
 	}
@@ -536,6 +538,9 @@ res.push('`);
 			res2.push('>');
 			if(node.varname !== undefined && !node.type){
 				var key = toFuncVarname(get_varname(node));
+				if(childs.length){
+					console.error('Node should have either variable or child nodes, both given. Node: "' + node.tagname + node.classnames + '", variable: "' + key + '"');
+				}
 				res2.push(indent + getvar_raw(key));
 			} else {
 				if(node.loop){
@@ -579,7 +584,6 @@ res.push('`);
 				}
 			}
 		} else {
-			//console.log('create func', node.loop, loop_level);
 			node.partial_func = create_func(childs_html, false, loop_level);
 			if(pp){
 				for(let nd of pp){
@@ -778,6 +782,9 @@ Ozenfant.prototype.eachLoopBinding = function(loop, cb){
 		this.eachLoopBinding(parent, (bnd, val_arr) => {
 			var pth = parent.paths[loop.name];
 			binding = Ozenfant.xpOne(pth, bnd);
+			if(!binding){
+				console.error('Cannot find bindings', bnd, pth);
+			}
 			var llevel = get_level(loop.name);
 			var scope = val_arr[llevel][trim_dots(loop.name)];
 			for(let c in binding.children){

@@ -181,7 +181,7 @@ describe('Amadee Ozenfant', function () {
 	
 	it('Testing variables in styles and attrs', function(){
 		var tmpl = `
-		
+	.	
 		.
 			a(href: $link)
 				"Go"
@@ -219,10 +219,10 @@ describe('Amadee Ozenfant', function () {
 						.
 							? $isOpened
 									a.close
-											"close"
+										"close"
 							:
 									a.open
-											"Open"
+										"Open"
 				:
 						.
 								"Scalar"
@@ -234,32 +234,53 @@ describe('Amadee Ozenfant', function () {
 		tmpl.render($(".test-nested-if").get(0), {
 			isObj: true
 		});
-		//console.log('RES', tmpl.toHTML());
+		
+		//console.log('tmpl', tmpl);return;
+		var has = (str, substr) => {
+			return str.indexOf(substr) !== -1;
+		}
+		assert.equal(true, has($(".test-nested-if").html(), 'class="open"'));
+		
+		tmpl.set('isObj', false);
+		assert.equal(true, has($(".test-nested-if").html(), 'Scalar'));
+		
+		tmpl.set('isObj', true);
+		assert.equal(true, has($(".test-nested-if").html(), 'class="open"'));
+		
+		tmpl.set('isOpened', true);
+		assert.equal(true, has($(".test-nested-if").html(), 'class="close"'));
 	})
 	it('testing nested loops', () => {
 		var tmpl = Ozenfant.prepare(`
 		.{$companies}
 			.
 				h1.$.title
-				ul.people{$.people}
-					li
-						.name$..name
-						.surname$..surname
-						.company$
-						.relatives
-							? !$display_list
-								.company$.title
-								select{$..relatives}
-									option.$...name(value: $...type, data-name: $..name)
-							:
-								ul{$..relatives}
-									li.$...name(data-value: $...type, data-name: $..name)
+				.
+					? $display_people
+						ul.people{$.people}
+							li
+								.name$..name
+								.surname$..surname
+								.company$
+								.relatives
+									? !$display_list
+										.company$.title
+										select{$..relatives}
+											option.$...name(value: $...type, data-name: $..name)
+									:
+										ul{$..relatives}
+											li.$...name(data-value: $...type, data-name: $..name)
+					:
+						a.display-people
+							"Display people"
 								
 		
 		`);
 		console.log('Tmpl', tmpl);
 		tmpl = new Ozenfant(tmpl);
-		var rnode = $(".test-nested-loop").get(0);
+		var root = $(".test-nested-loop");
+		var rnode = root.get(0);
+		var get_html = $(".test-nested-loop").html.bind($(".test-nested-loop"));
 		var people = [
 			{
 				name: 'Michael',
@@ -312,16 +333,28 @@ describe('Amadee Ozenfant', function () {
 				]
 			},
 		];
-		tmpl.render(rnode, {companies: [{
-			title: 'People\'s list',
-			company: 'RSTSh studio',
-			people,
-		}]});
+		tmpl.render(rnode, {
+			companies: [{
+				title: 'People\'s list',
+				company: 'RSTSh studio',
+				people,
+			}],
+			display_people: true,
+		});
+		
+		assert.equal(root.find('li').length, 3);
+		console.log(root.find('li:nth-child(2) .surname').html().trim());
+		
 		people[2].surname = 'Kovalchuk';
-		console.log('_________________');
 		tmpl.set('companies[0]/people', people);
+		
+		console.log(root.find('li:nth-child(2) .surname').html().trim());
+		return;
+		
 		people.pop();
 		tmpl.set('companies[0]/people', people);
+		
+		
 		people.push({
 			name: 'Katherine',
 			surname: 'Petrenko',
@@ -355,7 +388,11 @@ describe('Amadee Ozenfant', function () {
 			]
 		});
 		tmpl.set('companies[0]/people', people);
+		
+		
 		tmpl.set('companies[0]/company', 'Brainstorm-IT');
+		
+		
 		setTimeout(() => {
 			tmpl.set('display_list', true);
 		}, 500);
