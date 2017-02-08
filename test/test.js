@@ -348,10 +348,12 @@ describe('Amadee Ozenfant', function () {
 		tmpl.set('companies[0]/people[2]', people[2]);
 		
 		assert.equal(root.find('li:nth-child(3) .surname').html().trim(), ntd);
-		return;
 		
 		people.pop();
 		tmpl.set('companies[0]/people', people);
+		assert.equal(root.find('li').length, 2);
+		
+		return;
 		
 		people.push({
 			name: 'Katherine',

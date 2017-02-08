@@ -768,17 +768,24 @@ Ozenfant.prototype.eachLoopBinding = function(loop, cb){
 	}
 } 
 
-Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, level = 0){
+Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, old_val, level = 0){
 	var pth = path.split('/');
 	var first = pth[0].match(/([^\[]*)\[([^\]]*)\]/);
 	if(!first){
 		var keyname = new Array(level + 1).join('.') + pth[0];
-		var binding = Ozenfant.xpOne(parent_loop.paths[keyname], el);
-		// @TODO!
+		var paths_hash = parent_loop.paths || parent_loop.node_vars_paths;
+		var binding = Ozenfant.xpOne(paths_hash[keyname], el);
+		old_val = old_val[trim_dots(keyname)];
+		if(this.loop_pool[keyname]){
+			this.setLoop(keyname, val, old_val, binding);
+		} else {
+			this.__set(keyname, val, old_val, binding);
+		}
 		return;
 	}
 	var loopname = new Array(level + 1).join('.') + first[1];
 	var index = first[2];
+	old_val = old_val[trim_dots(loopname)][index];
 	var loop = this.loop_pool[loopname];
 	var path_pool = parent_loop === this ? this.node_vars_paths : parent_loop.paths;
 	var loop_binding = Ozenfant.xpOne(path_pool[loopname], el);
@@ -786,7 +793,7 @@ Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, level
 	var rest = pth.slice(1);
 	if(rest.length){
 		var new_context = last(context)[loopname][index];
-		this.rec_set(bnd, loop, rest.join('/'), val, context.concat(new_context), ++level);
+		this.rec_set(bnd, loop, rest.join('/'), val, context.concat(new_context), old_val, ++level);
 	} else {
 		var new_context = last(context)[first[1]][index];
 		if(new_context){
@@ -848,7 +855,10 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force,
 	var binding;
 	if(key.indexOf('/') !== -1){
 		// @todo
-		this.rec_set(this.root, this, key, val, [this.state]);
+		if(key[0] === '/'){
+			key = key.substr(1);
+		}
+		this.rec_set(this.root, this, key, val, [this.state], this.state);
 		return;
 	}
 	if(this.state[key] === val && !force){
