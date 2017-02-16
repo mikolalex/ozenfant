@@ -24,6 +24,14 @@ var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
 }
 
+var traverse_tree = (root_node, cb, key = 'children') => {
+	for(var b in root_node[key]){
+		var leaf = root_node[key][b];
+		cb(leaf);
+		traverse_tree(leaf, cb, key);
+	}
+}
+
 var text_var_regexp = /\{\{([a-zA-Z0-9]*)\}\}/g;///\$([a-zA-Z0-9]*)/g;
 
 var Ozenfant = function(str){
@@ -223,6 +231,10 @@ var register_loop = function(varname, level, pool, parent_loop){
 		parent_loop,
 		name: varname,
 		level,
+	}
+	if(parent_loop){
+		init_if_empty(parent_loop, 'nested_loops', []);
+		parent_loop.nested_loops.push(lp);
 	}
 	pool[varname] = lp;
 	return lp;
@@ -692,7 +704,7 @@ Ozenfant.prototype._setVarVal = function(key, val, binding){
 Ozenfant.prototype._setValByPath = function(path, val, root_node){
 	document.evaluate(path, root_node, null, XPathResult.ANY_TYPE, null).iterateNext().innerHTML = val;
 }
-Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding){
+Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding, context){
 	var loop = this.loop_pool[loopname];
 	var prefix = new Array(loop.level + 2).join('.');
 	for(var k in val){
@@ -702,7 +714,7 @@ Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding){
 		}
 		var varname = prefix + k;
 		if(loop.paths[varname]){
-			this.set(varname, val[k], loop, binding, old_val[k]);
+			this.set(varname, val[k], loop, binding, old_val[k], false, context);
 		}
 	}
 }
@@ -710,30 +722,34 @@ Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding){
 Ozenfant.prototype.removeLoopItem = function(binding, i){
 	binding.children[i].remove();
 }
-Ozenfant.prototype.addLoopItems = function(loop, from, to, val, binding){
+Ozenfant.prototype.addLoopItems = function(loop, from, to, val, binding, context){
 	var res = [];
 	var func = this.var_types[loop].func;
 	for(var i = from; i<= to; ++i){
-		res.push(func(this.state, val[i]));
+		res.push(func.apply(null, context.concat(val[i])));
 	}
 	// !!! should be rewritten!
 	binding.insertAdjacentHTML("beforeend", res.join(''));
 }
 
-Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding){
+Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding, parent_context){
 	for(var i in val){
 		if(old_val[i]){
 			this.updateLoopVals(loopname, val[i], old_val[i], binding.children[i]);
 		} else {
-			this.addLoopItems(loopname, i, val.length - 1, val, binding);
+			this.addLoopItems(loopname, i, val.length - 1, val, binding, parent_context);
 			break;
 		}
 	}
 	++i;
 	if(old_val[i]){
+		var init_i = i;
+		var del_count = 0;
 		for(;old_val[i];i++){
+			++del_count;
 			this.removeLoopItem(binding, i);
 		}
+		old_val.splice(init_i, del_count);
 	}
 }
 
@@ -774,12 +790,24 @@ Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, old_v
 	if(!first){
 		var keyname = new Array(level + 1).join('.') + pth[0];
 		var paths_hash = parent_loop.paths || parent_loop.node_vars_paths;
-		var binding = Ozenfant.xpOne(paths_hash[keyname], el);
-		old_val = old_val[trim_dots(keyname)];
-		if(this.loop_pool[keyname]){
-			this.setLoop(keyname, val, old_val, binding);
+		if(paths_hash[keyname]){
+			var binding = Ozenfant.xpOne(paths_hash[keyname], el);
+			old_val = old_val[trim_dots(keyname)];
+			if(this.loop_pool[keyname]){
+				this.setLoop(keyname, val, old_val, binding, context);
+			} else {
+				this.__set(keyname, val, old_val, binding);
+			}
 		} else {
-			this.__set(keyname, val, old_val, binding);
+			var key = new Array(parent_loop.level + 2).join('.') + path;
+			traverse_tree(parent_loop, (loop) => {
+				if(loop.paths[key]){
+					this.eachLoopBinding(loop, (bnd) => {
+						var bind = Ozenfant.xpOne(loop.paths[key], bnd);
+						this.__set(key, val, null, bind, loop);
+					})
+				}
+			}, 'nested_loops');
 		}
 		return;
 	}
@@ -798,7 +826,7 @@ Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, old_v
 		var new_context = last(context)[first[1]][index];
 		if(new_context){
 			// already exists
-			this.updateLoopVals(loopname, val, new_context, bnd);
+			this.updateLoopVals(loopname, val, new_context, bnd, context);
 		} else {
 			// @todO!
 			//this.addLoopItems(loopname, index, index, val, binding);
@@ -826,7 +854,7 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 					binding.style[this.var_types[key].name] = val;
 				break;
 				case 'LOOP':
-					this.setLoop(key, val, old_val, binding)
+					this.setLoop(key, val, old_val, binding, loop_context)
 				break;
 				default:
 					var func;

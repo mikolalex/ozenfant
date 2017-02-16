@@ -90,7 +90,7 @@ var exp_struct = {
 	}]
 }
 
-//*
+//* /*
 describe('Amadee Ozenfant', function () {
 	var do_in_tree = (node, cb, child_key = 'children') => {
 		if(!node) return;
@@ -261,7 +261,7 @@ describe('Amadee Ozenfant', function () {
 							li
 								.name$..name
 								.surname$..surname
-								.company$
+								.company$.company
 								.relatives
 									? !$display_list
 										.company$.title
@@ -353,7 +353,6 @@ describe('Amadee Ozenfant', function () {
 		tmpl.set('companies[0]/people', people);
 		assert.equal(root.find('li').length, 2);
 		
-		return;
 		
 		people.push({
 			name: 'Katherine',
@@ -389,10 +388,9 @@ describe('Amadee Ozenfant', function () {
 		});
 		tmpl.set('companies[0]/people', people);
 		
-		
 		tmpl.set('companies[0]/company', 'Brainstorm-IT');
 		
-		
+		return;
 		setTimeout(() => {
 			tmpl.set('display_list', true);
 		}, 500);
