@@ -722,10 +722,11 @@ Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding, co
 Ozenfant.prototype.removeLoopItem = function(binding, i){
 	binding.children[i].remove();
 }
-Ozenfant.prototype.addLoopItems = function(loop, from, to, val, binding, context){
+Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding, context){
 	var res = [];
 	var func = this.var_types[loop].func;
 	for(var i = from; i<= to; ++i){
+		old_val[i] = val[i];
 		res.push(func.apply(null, context.concat(val[i])));
 	}
 	// !!! should be rewritten!
@@ -733,16 +734,18 @@ Ozenfant.prototype.addLoopItems = function(loop, from, to, val, binding, context
 }
 
 Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding, parent_context){
+	var skip_removing = false;
 	for(var i in val){
 		if(old_val[i]){
 			this.updateLoopVals(loopname, val[i], old_val[i], binding.children[i]);
 		} else {
-			this.addLoopItems(loopname, i, val.length - 1, val, binding, parent_context);
+			skip_removing = true;
+			this.addLoopItems(loopname, i, val.length - 1, val, old_val, binding, parent_context);
 			break;
 		}
 	}
 	++i;
-	if(old_val[i]){
+	if(old_val[i] && !skip_removing){
 		var init_i = i;
 		var del_count = 0;
 		for(;old_val[i];i++){

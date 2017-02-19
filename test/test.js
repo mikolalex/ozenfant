@@ -250,7 +250,7 @@ describe('Amadee Ozenfant', function () {
 		tmpl.set('isOpened', true);
 		assert.equal(true, has($(".test-nested-if").html(), 'class="close"'));
 	})
-	it('testing nested loops', () => {
+	it('testing nested loops', (done) => {
 		var tmpl = Ozenfant.prepare(`
 		.{$companies}
 			.
@@ -387,12 +387,20 @@ describe('Amadee Ozenfant', function () {
 			]
 		});
 		tmpl.set('companies[0]/people', people);
+		assert.equal($(".people > *").length, 4);
 		
-		tmpl.set('companies[0]/company', 'Brainstorm-IT');
+		const comp2 = 'Brainstorm-IT';
+		tmpl.set('companies[0]/company', comp2);
+		assert.equal($(".people > *:first-child .company").html(), comp2);
 		
-		return;
+		const comp3 = 'RSTSh';
+		tmpl.set('companies[0]/company', comp3);
+		assert.equal($(".people .company").html(), comp3);
+		
 		setTimeout(() => {
 			tmpl.set('display_list', true);
+			assert.equal($(".people > *:first-child ul > li").length, 3);
+			done();
 		}, 500);
 		///console.log('RES', tmpl.toHTML());
 	})
