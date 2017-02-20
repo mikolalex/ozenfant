@@ -19,7 +19,7 @@ var last = (arr) => {
 	return arr[arr.length - 1];
 }
 
-var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type', 'value', 'min', 'max', 'step'])
+var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type', 'value', 'min', 'max', 'step', 'name'])
 var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
 }
@@ -739,7 +739,8 @@ Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding
 	var func = this.var_types[loop].func;
 	for(var i = from; i<= to; ++i){
 		old_val[i] = val[i];
-		res.push(func.apply(null, context.concat(val[i])));
+		var ht = func.apply(null, context.concat(val[i]));
+		res.push(ht);
 	}
 	// !!! should be rewritten!
 	binding.insertAdjacentHTML("beforeend", res.join(''));
@@ -760,9 +761,9 @@ Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding, parent_co
 	if(old_val[i] && !skip_removing){
 		var init_i = i;
 		var del_count = 0;
-		for(;old_val[i];i++){
+		for(let j = old_val.length - 1;j >= i;j--){
 			++del_count;
-			this.removeLoopItem(binding, i);
+			this.removeLoopItem(binding, j);
 		}
 		old_val.splice(init_i, del_count);
 	}

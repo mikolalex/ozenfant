@@ -120,6 +120,7 @@ module.exports = {
 			regex: /^[^\)^\,]*$/
 		},
 		quoted_str: {
+			can_start_with_space: true,
 			start: '"',
 			end: '"',
 			free_chars: true,
