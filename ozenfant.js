@@ -19,7 +19,7 @@ var last = (arr) => {
 	return arr[arr.length - 1];
 }
 
-var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type', 'value'])
+var html_attrs = new Set(['href', 'src', 'style', 'target', 'id', 'class', 'rel', 'type', 'value', 'min', 'max', 'step'])
 var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
 }
@@ -158,6 +158,7 @@ var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops
 	var original_varname = varname;
 	if(varname_pool.vars[varname]){
 		// already exists!
+		//console.log('VAR', varname, 'already exists!');
 		init_if_empty(varname_pool.var_aliases, varname, []);
 		var new_name = prefix + varname + '_' + varname_pool.var_aliases[varname].length;
 		varname_pool.var_aliases[varname].push(new_name);
@@ -365,7 +366,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 	}
 }
 
-var input_types = new Set(['text', 'submit', 'checkbox', 'radio']);
+var input_types = new Set(['text', 'submit', 'checkbox', 'radio', 'range']);
 
 var toHTML = function(node, context, parent_tag){
 }
@@ -713,6 +714,13 @@ Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding, co
 			continue;
 		}
 		var varname = prefix + k;
+		if(this.varname_pool.var_aliases[varname]){
+			for(let vn of this.varname_pool.var_aliases[varname]){
+				if(loop.paths[vn]){
+					this.set(vn, val[k], loop, binding, old_val[k], false, context);
+				}
+			}
+		}
 		if(loop.paths[varname]){
 			this.set(varname, val[k], loop, binding, old_val[k], false, context);
 		}
@@ -720,7 +728,11 @@ Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding, co
 }
 
 Ozenfant.prototype.removeLoopItem = function(binding, i){
-	binding.children[i].remove();
+	if(binding.children[i]){
+		binding.children[i].remove();
+	} else {
+		console.warn('Cannot remove unexisting', i);
+	}
 }
 Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding, context){
 	var res = [];
