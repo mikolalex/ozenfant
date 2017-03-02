@@ -162,7 +162,8 @@ module.exports = {
 			free_chars: true,
 		},
 		indent: {
-			regex: /^\t+$/,
+			can_start_with_space: true,
+			regex: /^(\t|\s)+$/,
 			free_chars: true,
 		},
 		classnames: {
@@ -284,7 +285,7 @@ module.exports = {
 							res.type = child.type.toUpperCase();
 						break;
 						case 'indent':
-							res.level = child.chars.length;
+							res.level = child.chars.replace(/\n/g, '').length;
 							//console.log('INDEX', res.level);
 						break;
 						case 'loop':

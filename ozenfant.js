@@ -258,7 +258,7 @@ Ozenfant.prototype.register_path = function(varname, path, pool, loop){
 		path = pieces[pieces.length - 1];
 	}
 	if(path.indexOf('./*[1]') !== 0 && (!has_loops) && path.length){
-		console.error('Template should have only one root node! Given', path.indexOf('./*[1]'), path, this.str);
+		console.error('Template should have only one root node! Given', this.struct.semantics.length);
 	} else {
 		path = fix_path(path);
 	}
