@@ -12,6 +12,24 @@ var init_if_empty = function(obj/*key, val, key1, val1, ... */) {
 	}
 	return obj;
 }
+var count_indent = (str, child) => {
+	var spaces = str.match(/[\s^\t]*/g);
+	var spaces_count = 0;
+	if(spaces){
+		for(var i in spaces){
+			spaces_count += spaces[i].length;
+		}
+	}
+	var tabs = str.match(/[\t]*/g);
+	var tabs_count = 0;
+	if(tabs){
+		for(var i in tabs){
+			tabs_count += tabs[i].length;
+		}
+	}
+	spaces_count -= tabs_count;
+	return spaces_count + (tabs_count*4);
+}
 module.exports = {
 	empty_chars: [' '],
 	syntax: {
@@ -285,8 +303,7 @@ module.exports = {
 							res.type = child.type.toUpperCase();
 						break;
 						case 'indent':
-							res.level = child.chars.replace(/\n/g, '').length;
-							//console.log('INDEX', res.level);
+							res.level = count_indent(child.chars, child)
 						break;
 						case 'loop':
 							res.loop = child.chars.match(/\{\$([^\}]*)\}/)[1];
