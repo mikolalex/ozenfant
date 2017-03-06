@@ -19,6 +19,28 @@ var last = (arr) => {
 	return arr[arr.length - 1];
 }
 
+const toggle_class = (el, clas, val) => {
+	const cls_string = el.getAttribute('class') || '';
+	const cls = cls_string.split(' ');
+	const pos = cls.indexOf(clas);
+	var toggle;
+	if(val !== undefined){
+		toggle = val;
+	} else {
+		toggle = pos === -1;
+	}
+	if(toggle){
+		if(cls.indexOf(clas) === -1){
+			el.setAttribute('class', cls_string + ' ' + clas);
+		}
+	} else {
+		if(pos !== -1){
+			cls.splice(pos, 1);
+		}
+		el.setAttribute('class', cls.join(' '));
+	}
+}
+
 var html_attrs = new Set(["accept","accept-charset","accesskey","action","align","alt","async","autocomplete","autofocus","autoplay","autosave","bgcolor","border","buffered","challenge","charset","checked","cite","class","code","codebase","color","cols","colspan","content","contenteditable","contextmenu","controls","coords","data","data-*","datetime","default","defer","dir","dirname","disabled","download","draggable","dropzone","enctype","for","form","formaction","headers","height","hidden","high","href","hreflang","http-equiv","icon","id","integrity","ismap","itemprop","keytype","kind","label","lang","language","list","loop","low","manifest","max","maxlength","media","method","min","multiple","muted","name","novalidate","open","optimum","pattern","ping","placeholder","poster","preload","radiogroup","readonly","rel","required","reversed","rows","rowspan","sandbox","scope","scoped","seamless","selected","shape","size","sizes","slot","span","spellcheck","src","srcdoc","srclang","srcset","start","step","style","summary","tabindex","target","title","type","usemap","value","width","wrap"])
 var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
@@ -265,6 +287,12 @@ Ozenfant.prototype.register_path = function(varname, path, pool, loop){
 	pool[varname] = path;
 }
 
+var special_html_setters = {
+	'hasClass': (binding, val, [classname]) => {
+		toggle_class(binding, classname, val);
+	},
+}
+
 Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, parent_has_loop){
 	var node_pool = this.node_vars_paths;
 	var text_pool = this.text_vars_paths;
@@ -328,11 +356,24 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					for(let [varname, attrname] of zild.attrStyleVars){
 						varname = register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 						this.register_path(varname, new_path, node_pool, last_loop);
-						let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
-						types[varname] = {
-							type: as_type,
-							name: attrname,
+						
+						const pieces = attrname.split('|');
+						const real_name = pieces[0];
+						if(special_html_setters[real_name]){
+							// its special setter
+							types[varname] = {
+								type: 'SETTER',
+								name: real_name,
+								params: pieces.slice(1)
+							}
+						} else {
+							let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
+							types[varname] = {
+								type: as_type,
+								name: attrname,
+							}
 						}
+						
 					}
 					this.get_vars(zild, new_path, types, [...if_else_deps], loops);
 				} 
@@ -869,6 +910,9 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 				break;
 				case 'STYLE':
 					binding.style[this.var_types[key].name] = val;
+				break;
+				case 'SETTER':
+					special_html_setters[this.var_types[key].name](binding, val, this.var_types[key].params);
 				break;
 				case 'LOOP':
 					const ct = loop_context || [this.state];
