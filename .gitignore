@@ -2,4 +2,4 @@
 /dist/
 /test/test.br.js
 /test/node_modules/
-/test/dst/
+/test/dst/test.js
