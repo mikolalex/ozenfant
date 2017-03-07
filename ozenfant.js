@@ -288,9 +288,48 @@ Ozenfant.prototype.register_path = function(varname, path, pool, loop){
 }
 
 var special_html_setters = {
-	'hasClass': (binding, val, [classname]) => {
-		toggle_class(binding, classname, val);
+	'hasClass': {
+		dom: (binding, val, [classname]) => {
+			toggle_class(binding, classname, val);
+		}, 
+		str: (val, conf, [classname]) => {
+			conf.classnames.push("' + ((" + val + ") ? '" + classname + "' : '') + '");
+		}
 	},
+	'value': {
+		updateAnyway: true,
+		dom: (binding, val) => {
+			binding.value = val;
+		}, 
+		str: (val, conf, [classname]) => {
+			conf.attrs.push(' value="' + "' + (" + val + " || '') + '" + '"');
+		}
+	},
+	'show': {
+		dom: (binding, val, [disp]) => {
+			var shown = disp || 'block';
+			if(!val){
+				binding.style.display = 'none';
+			} else {
+				binding.style.display = shown;
+			}
+		}, 
+		str: (val, conf, [disp]) => {
+			disp = disp || 'block';
+			conf.styles.push("display: ' + ((" + val + ") ? '" + disp + "' : 'none') + '");
+		}
+	},
+	'focus': {
+		updateAnyway: true,
+		dom: (binding, val) => {
+			if(val){
+				binding.focus();
+			}
+		},
+		str: (val, conf) => {
+			conf.attrs.push(" ' + (" + val + " ? 'autofocus' : '') + '");
+		}
+	}
 }
 
 Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, parent_has_loop){
@@ -357,14 +396,13 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 						varname = register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
 						this.register_path(varname, new_path, node_pool, last_loop);
 						
-						const pieces = attrname.split('|');
-						const real_name = pieces[0];
+						const [real_name, params] = parse_attr_style_name(attrname);
 						if(special_html_setters[real_name]){
 							// its special setter
 							types[varname] = {
 								type: 'SETTER',
 								name: real_name,
-								params: pieces.slice(1)
+								params: params
 							}
 						} else {
 							let as_type = is_attr(attrname) ? 'ATTR' : 'STYLE';
@@ -446,6 +484,11 @@ var toFuncVarname = (a) => {
 		a = 'ctx' + a;
 	}
 	return a;
+}
+
+var parse_attr_style_name = (attrname) => {
+	const pieces = attrname.split('|');
+	return [pieces[0], pieces.slice(1)];
 }
 
 var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loop_level = 0){
@@ -532,11 +575,13 @@ res.push('`);
 		res1.push(childs_html);
 		if(parent_tag){
 			res2.push(indent + '<' + tag);
+			var styles = [];
+			var attrs = [];
+			var conf = {attrs, styles, classnames: []};
 			if(node.classnames && node.classnames.length > 1){
-				res2.push(' class="' + node.classnames.substr(1).replace(/\./g, " ") + '"');
+				conf.classnames = node.classnames.substr(1).split('.');
 			}
 			if(node.assignments){
-				var styles = [];
 				for(let ass of node.assignments){
 					var [key, val] = ass;
 					if(val[0] === '$'){
@@ -545,15 +590,26 @@ res.push('`);
 						real_key = toFuncVarname(real_key);
 						val = getvar_raw(real_key);
 					}
-					if(is_attr(key)){
-						res2.push(' ' + key + '="' + val + '"');
+					const [real_name, params] = parse_attr_style_name(key);
+					if(special_html_setters[real_name]){
+						special_html_setters[real_name].str(real_key, conf, params);
 					} else {
-						styles.push(key + ': ' + val + ';');
+						if(is_attr(real_name)){
+							conf.attrs.push(' ' + key + '="' + val + '"');
+						} else {
+							conf.styles.push(key + ': ' + val + ';');
+						}
 					}
 				}
-				if(styles.length){
-					res2.push(' style="' + styles.join('') + '"');
-				}
+			}
+			if(styles.length){
+				res2.push(' style="' + styles.join('') + '"');
+			}
+			if(conf.classnames.length){
+				res2.push(' class="' + conf.classnames.join(' ') + '"');
+			}
+			if(conf.attrs.length){
+				res2.push(' ' + attrs.join(' ') + ' ');
 			}
 			res2.push('>');
 			if(node.varname !== undefined && !node.type){
@@ -912,7 +968,7 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 					binding.style[this.var_types[key].name] = val;
 				break;
 				case 'SETTER':
-					special_html_setters[this.var_types[key].name](binding, val, this.var_types[key].params);
+					special_html_setters[this.var_types[key].name].dom(binding, val, this.var_types[key].params);
 				break;
 				case 'LOOP':
 					const ct = loop_context || [this.state];
@@ -941,6 +997,12 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 	}
 }
 
+Ozenfant.prototype.updateAnyway = function(key){
+	return this.var_types[key] 
+		&& special_html_setters[this.var_types[key].name]
+		&& special_html_setters[this.var_types[key].name].updateAnyway;
+}
+
 Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force, loop_context){
 	var binding;
 	if(key.indexOf('/') !== -1){
@@ -952,7 +1014,18 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force,
 		return;
 	}
 	if(this.state[key] === val && !force){
-		return; 
+		if(!this.updateAnyway(key)){
+			if(this.varname_pool.var_aliases[key]){
+				for(let k of this.varname_pool.var_aliases[key]){
+					if(this.updateAnyway(k)){
+						this.set(k, val, loop, loop_binding, old_data, true);
+					}
+				}
+			}
+			return;
+		} else {
+			// OK...
+		}
 	} 
 	if(val instanceof Object){
 		// we need to make deep copy
