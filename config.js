@@ -88,6 +88,17 @@ module.exports = {
 							},
 							'optional'
 						],
+						[
+							'|', 
+							{
+								type: 'quoted_str',
+								optional: true,
+							}, {
+								type: 'variable',
+								optional: true,
+							},
+							'optional'
+						],
 						{
 							type: 'bracket',
 							optional: true,
@@ -97,7 +108,7 @@ module.exports = {
 							optional: true,
 						},
 						{
-							type: 'str',
+							type: 'trim',
 							optional: true,
 						},
 					],
@@ -182,6 +193,11 @@ module.exports = {
 		indent: {
 			can_start_with_space: true,
 			regex: /^(\t|\s)+$/,
+			free_chars: true,
+		},
+		trim: {
+			can_start_with_space: true,
+			regex: /^[\t ]*$/,
 			free_chars: true,
 		},
 		classnames: {
@@ -315,7 +331,7 @@ module.exports = {
 								if(child1.type === 'assign'){
 									var assign = child1.chars.split(':');
 									var key = assign[0].trim();
-									var val = assign[1].trim();
+									var val = assign[1] ? assign[1].trim() : '';
 									if(val[0] === '$'){
 										// its var
 										let varname = val.length === 1 ? key : val.substr(1);

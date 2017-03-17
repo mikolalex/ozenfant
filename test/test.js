@@ -181,7 +181,7 @@ describe('Amadee Ozenfant', function () {
 	
 	it('Testing variables in styles and attrs', function(){
 		var tmpl = `
-	.	
+	.				    
 		.
 			a(href: $link)
 				"Go"
@@ -192,7 +192,6 @@ describe('Amadee Ozenfant', function () {
 		
 		`;
 		tmpl = new Ozenfant(tmpl);
-		//console.log('tmpl2', tmpl, tmpl.struct.syntax, tmpl.struct.semantics);
 		tmpl.render($(".test-attr").get(0), {
 			link: 'www.home.cern',
 			width: '200px',
@@ -403,6 +402,30 @@ describe('Amadee Ozenfant', function () {
 			done();
 		}, 500);
 		///console.log('RES', tmpl.toHTML());
+	})
+	
+	it('testing syntax terror 1', () => {
+			var create_tmpl = () => {
+				var tmpl = new Ozenfant(`
+					.a
+						.b
+						.c(some unfinished bracket
+					.e
+				`);
+			}
+			assert.throws(create_tmpl, Error, "Cannot parse template");
+	})
+	it('testing syntax terror 2', () => {
+			var create_tmpl = () => {
+				var tmpl = new Ozenfant(`
+					.a
+						,.b
+						.c
+					.e
+				`);
+				console.log('Tmpl', tmpl.toHTML());
+			}
+			assert.throws(create_tmpl, Error, "Cannot parse template");
 	})
 })
 //*/

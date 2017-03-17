@@ -41,7 +41,7 @@ const toggle_class = (el, clas, val) => {
 	}
 }
 
-var html_attrs = new Set(["accept","accept-charset","accesskey","action","align","alt","async","autocomplete","autofocus","autoplay","autosave","bgcolor","border","buffered","challenge","charset","checked","cite","class","code","codebase","color","cols","colspan","content","contenteditable","contextmenu","controls","coords","data","data-*","datetime","default","defer","dir","dirname","disabled","download","draggable","dropzone","enctype","for","form","formaction","headers","height","hidden","high","href","hreflang","http-equiv","icon","id","integrity","ismap","itemprop","keytype","kind","label","lang","language","list","loop","low","manifest","max","maxlength","media","method","min","multiple","muted","name","novalidate","open","optimum","pattern","ping","placeholder","poster","preload","radiogroup","readonly","rel","required","reversed","rows","rowspan","sandbox","scope","scoped","seamless","selected","shape","size","sizes","slot","span","spellcheck","src","srcdoc","srclang","srcset","start","step","style","summary","tabindex","target","title","type","usemap","value","width","wrap"])
+var html_attrs = new Set(["accept","accept-charset","accesskey","action","align","alt","async","autocomplete","autofocus","autoplay","autosave","bgcolor","border","buffered","challenge","charset","checked","cite","class","code","codebase","color","cols","colspan","content","contenteditable","contextmenu","controls","coords","data","data-*","datetime","default","defer","dir","dirname","disabled","download","draggable","dropzone","enctype","for","form","formaction","headers","hidden","high","href","hreflang","http-equiv","icon","id","integrity","ismap","itemprop","keytype","kind","label","lang","language","list","loop","low","manifest","max","maxlength","media","method","min","multiple","muted","name","novalidate","open","optimum","pattern","ping","placeholder","poster","preload","radiogroup","readonly","rel","required","reversed","rows","rowspan","sandbox","scope","scoped","seamless","selected","shape","size","sizes","slot","span","spellcheck","src","srcdoc","srclang","srcset","start","step","style","summary","tabindex","target","title","type","usemap","value","wrap"])
 var is_attr = (str) => {
 	return html_attrs.has(str) || str.match(/^data\-/);
 }
@@ -179,12 +179,12 @@ var prefix = 'ololo@!@!#_';
 var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool) => {
 	var original_varname = varname;
 	if(varname_pool.vars[varname]){
-		// already exists!
-		//console.log('VAR', varname, 'already exists!');
-		init_if_empty(varname_pool.var_aliases, varname, []);
-		var new_name = prefix + varname + '_' + varname_pool.var_aliases[varname].length;
-		varname_pool.var_aliases[varname].push(new_name);
-		varname = new_name;
+            // already exists!
+            //console.log('VAR', varname, 'already exists!');
+            init_if_empty(varname_pool.var_aliases, varname, []);
+            var new_name = prefix + varname + '_' + varname_pool.var_aliases[varname].length;
+            varname_pool.var_aliases[varname].push(new_name);
+            varname = new_name;
 	} else {
 		varname_pool.vars[varname] = true;
 	}
@@ -487,8 +487,8 @@ var toFuncVarname = (a) => {
 }
 
 var parse_attr_style_name = (attrname) => {
-	const pieces = attrname.split('|');
-	return [pieces[0], pieces.slice(1)];
+    const pieces = attrname.split(' ');
+    return [pieces[0], pieces.slice(1)];
 }
 
 var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loop_level = 0){
