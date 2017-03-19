@@ -113,7 +113,13 @@ var create_func = (str, condition, loop_level) => {
 		}
 	}
 	const fbody = 'var res = []; var res2 = []; res.push(' + body + '); return res.join("");';
-	return new Function(args, fbody);
+	try {
+		var f = new Function(args, fbody);
+		return f;
+	} catch(e) {
+		console.error('Cannot create function');
+		return new Function('', '');
+	}
 }
 
 Ozenfant.prepare = (str) => {
@@ -637,7 +643,9 @@ res.push('`);
 	} else {
 		// its var of text node
 		if(node.quoted_str){
-			res_final = indent + node.quoted_str.replace(text_var_regexp, function(_, key){
+			res_final = indent + node.quoted_str
+					.replace(/\'/g, "\\'")
+					.replace(text_var_regexp, function(_, key){
 				//console.log('Found!', key, context[key]);
 				return "' + ctx." + key + " + '";
 			});
