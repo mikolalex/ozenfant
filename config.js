@@ -322,7 +322,11 @@ module.exports = {
 							res.level = count_indent(child.chars, child)
 						break;
 						case 'loop':
-							res.loop = child.chars.match(/\{\$([^\}]*)\}/)[1];
+							const loopvn = child.chars.match(/\{\$([^\}]*)\}/);
+							if(!loopvn){
+								throw new Error('Ozenfant: Wrong loop var name: ' + child.chars + ', should match /\{\$([^\}]*)\}/');
+							}
+							res.loop = loopvn[1];
 							//console.log('INDEX', res.level);
 						break;
 						case 'bracket':

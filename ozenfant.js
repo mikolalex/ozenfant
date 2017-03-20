@@ -302,7 +302,21 @@ var special_html_setters = {
 			conf.classnames.push("' + ((" + val + ") ? '" + classname + "' : '') + '");
 		}
 	},
-	'value': {
+	'hasAttr': {
+		dom: (binding, val, [attrname]) => {
+			if(val){
+				binding.setAttribute(attrname, attrname);
+			} else {
+				binding.removeAttribute(attrname);
+			}
+		}, 
+		str: (val, conf, [attrname]) => {
+			if(val){
+				conf.attrs.push(" ' + (" + val + " ? '" + attrname + "' : '' ) + '");
+			}
+		}
+	},
+	'val': {
 		updateAnyway: true,
 		dom: (binding, val) => {
 			binding.value = val;
@@ -451,13 +465,13 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 	}
 }
 
-var input_types = new Set(['text', 'submit', 'checkbox', 'radio', 'range']);
+var input_types = new Set(['text', 'submit', 'checkbox', 'radio', 'range', 'file']);
 
 var toHTML = function(node, context, parent_tag){
 }
 
 var getvar = (key) => {
-	return "' + (ctx." + key + " || '') + '";
+	return "' + (ctx['" + key + "'] || '') + '";
 }
 var getvar_raw = (key) => {
 	return "' + (" + key + " || '') + '";
@@ -486,7 +500,7 @@ var toFuncVarname = (a) => {
 		varname = varname.length ? '.' + varname : '';
 		a = '__loopvar' + dot_counter + varname ;
 	} else {
-		a = a.length ? '.' + a : '';
+		a = a.length ? "['" + a + "']" : '';
 		a = 'ctx' + a;
 	}
 	return a;
@@ -647,7 +661,7 @@ res.push('`);
 					.replace(/\'/g, "\\'")
 					.replace(text_var_regexp, function(_, key){
 				//console.log('Found!', key, context[key]);
-				return "' + ctx." + key + " + '";
+				return "' + ctx['" + key + "'] + '";
 			});
 		}
 		if(node.variable){
@@ -842,10 +856,13 @@ Ozenfant.prototype.removeLoopItem = function(binding, i){
 Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding, context){
 	var res = [];
 	var func = this.var_types[loop].func;
+	old_val = old_val || [];
 	for(var i = from; i<= to; ++i){
 		old_val[i] = val[i];
-		var ht = func.apply(null, context.concat(val[i]));
-		res.push(ht);
+		if(val[i]){
+			var ht = func.apply(null, context.concat(val[i]));
+			res.push(ht);
+		}
 	}
 	// !!! should be rewritten!
 	binding.insertAdjacentHTML("beforeend", res.join(''));
@@ -854,7 +871,7 @@ Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding
 Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding, parent_context){
 	var skip_removing = false;
 	for(var i in val){
-		if(old_val[i]){
+		if(old_val && old_val[i]){
 			this.updateLoopVals(loopname, val[i], old_val[i], binding.children[i]);
 		} else {
 			skip_removing = true;
@@ -862,8 +879,12 @@ Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding, parent_co
 			break;
 		}
 	}
-	++i;
-	if(old_val[i] && !skip_removing){
+	if(i){
+		++i;
+	} else {
+		i = 0;
+	}
+	if(old_val && old_val[i] && !skip_removing){
 		var init_i = i;
 		var del_count = 0;
 		for(let j = old_val.length - 1;j >= i;j--){
