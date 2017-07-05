@@ -167,17 +167,25 @@ var get_varname = (node) => {
 	return key;
 }
 
-var get_dots = (loop_level) => {
-	return new Array(loop_level + 2).join('.');
+var symb = '.';
+
+var get_loop_varname = (loop_level, varname) => { 
+	var n = new Array(loop_level).join(symb) + varname;
+	return n;
 }
-var get_level = (varname) => {
-	var level = 0;
-	for(var i in varname){
-		if(varname[i] === '.'){
-			++level;
+
+var test_loop_varname = varname => varname[0] === symb;
+
+var parse_loop_varname = varname => {
+	var dot_counter = 0;
+	for(var cp in varname){
+		if(varname[cp] === symb){
+			++dot_counter;
+		} else {
+			break;
 		}
 	}
-	return level - 1;
+	return {name: varname.substr(dot_counter), level: dot_counter};
 }
 
 var prefix = 'ololo@!@!#_';
@@ -204,16 +212,16 @@ var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops
 	}
 	if(loops.length){
 		var last_loop = loop_pool[loops[loops.length - 1]];
-		if(original_varname.indexOf(get_dots(last_loop.level)) !== 0){;
+		if(parse_loop_varname(original_varname).level < last_loop.level + 1){
 			var curr_loop = last_loop;
-			var var_level = get_level(varname);
+			var var_level = parse_loop_varname(varname).level - 1;
 			while(true){
 				if(curr_loop === 'root'){
 					init_if_empty(varname_pool, 'loop_var_links', {}, original_varname, {}, varname, last_loop);
 					break;
 				} else {
 					if(curr_loop.level == var_level){
-						var vrkey = original_varname.indexOf('.') !== - 1 ? last(original_varname.split('.')) : original_varname;
+						var vrkey = parse_loop_varname(original_varname).name;
 						init_if_empty(curr_loop, 'subordinary_loop_vars', {}, vrkey, last_loop);
 						break;
 					}
@@ -486,19 +494,10 @@ var get_children_html = (childs, parent_tag, if_stack, pp, loop_level) => {
 }
 
 var toFuncVarname = (a) => {
-	var dot_counter = 0;
-	for(var cp in a){
-		if(a[cp] === '.'){
-			++dot_counter;
-		} else {
-			break;
-		}
-	}
-	var varname;
-	if(dot_counter){
-		varname = a.substr(dot_counter);
-		varname = varname.length ? '.' + varname : '';
-		a = '__loopvar' + dot_counter + varname ;
+	var {name, level} = parse_loop_varname(a);
+	if(level){
+		var varname = name.length ? '.' + name : '';
+		a = '__loopvar' + level + varname ;
 	} else {
 		a = a.length ? "['" + a + "']" : '';
 		a = 'ctx' + a;
@@ -689,17 +688,6 @@ res.push('`);
 	return res_final;
 }
 
-var trim_dots = (str) => {
-	var c = 0;
-	for(let i in str){
-		if(str[i] === '.') {
-			++c;
-		} else {
-			break;
-		}
-	}
-	return str.substr(c);;
-}
 
 Ozenfant.prototype.toHTML = function(context){
 	if(context){
@@ -826,13 +814,12 @@ Ozenfant.prototype._setValByPath = function(path, val, root_node){
 }
 Ozenfant.prototype.updateLoopVals = function(loopname, val, old_val, binding, context){
 	var loop = this.loop_pool[loopname];
-	var prefix = new Array(loop.level + 2).join('.');
 	for(var k in val){
 		if(val[k] === old_val[k]){
 			//console.log('skip', k);
 			continue;
 		}
-		var varname = prefix + k;
+		var varname = get_loop_varname(loop.level + 2, k);
 		if(this.varname_pool.var_aliases[varname]){
 			for(let vn of this.varname_pool.var_aliases[varname]){
 				if(loop.paths[vn]){
@@ -905,8 +892,8 @@ Ozenfant.prototype.eachLoopBinding = function(loop, cb){
 			if(!binding){
 				console.error('Cannot find bindings', bnd, pth);
 			}
-			var llevel = get_level(loop.name);
-			var scope = val_arr[llevel][trim_dots(loop.name)];
+			var llevel = parse_loop_varname(loop.name).level - 1;
+			var scope = val_arr[llevel][parse_loop_varname(loop.name).name];
 			for(let c in binding.children){
 				if(Number(c) != c) continue;
 				let child = binding.children[c];
@@ -931,18 +918,18 @@ Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, old_v
 	var pth = path.split('/');
 	var first = pth[0].match(/([^\[]*)\[([^\]]*)\]/);
 	if(!first){
-		var keyname = new Array(level + 1).join('.') + pth[0];
+		var keyname = get_loop_varname(level + 1, pth[0]);
 		var paths_hash = parent_loop.paths || parent_loop.node_vars_paths;
 		if(paths_hash[keyname]){
 			var binding = Ozenfant.xpOne(paths_hash[keyname], el);
-			old_val = old_val[trim_dots(keyname)];
+			old_val = old_val[parse_loop_varname(keyname).name];
 			if(this.loop_pool[keyname]){
 				this.setLoop(keyname, val, old_val, binding, context);
 			} else {
 				this.__set(keyname, val, old_val, binding);
 			}
 		} else {
-			var key = new Array(parent_loop.level + 2).join('.') + path;
+			var key = get_loop_varname(parent_loop.level + 2, path);
 			traverse_tree(parent_loop, (loop) => {
 				if(loop.paths[key]){
 					this.eachLoopBinding(loop, (bnd) => {
@@ -954,9 +941,9 @@ Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, old_v
 		}
 		return;
 	}
-	var loopname = new Array(level + 1).join('.') + first[1];
+	var loopname = get_loop_varname(level + 1, first[1]);
 	var index = first[2];
-	old_val = old_val[trim_dots(loopname)][index];
+	old_val = old_val[parse_loop_varname(loopname).name][index];
 	var loop = this.loop_pool[loopname];
 	var path_pool = parent_loop === this ? this.node_vars_paths : parent_loop.paths;
 	var loop_binding = Ozenfant.xpOne(path_pool[loopname], el);
@@ -1065,7 +1052,7 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force,
 		}
 	}
 	var old_val = loop ? old_data : this.state[key];
-	if(!force && key[0] !== '.'){
+	if(!force && !test_loop_varname(key)){
 		this.state[key] = val;
 	}
 	if(this.varname_pool.loop_var_links && this.varname_pool.loop_var_links[key] && !loop){

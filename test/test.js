@@ -90,7 +90,7 @@ var exp_struct = {
 	}]
 }
 
-//* /*
+
 describe('Amadee Ozenfant', function () {
 	var do_in_tree = (node, cb, child_key = 'children') => {
 		if(!node) return;
@@ -276,6 +276,7 @@ describe('Amadee Ozenfant', function () {
 		
 		`);
 		tmpl = new Ozenfant(tmpl);
+		console.log('Tmpl', tmpl);
 		var root = $(".test-nested-loop");
 		var rnode = root.get(0);
 		var get_html = $(".test-nested-loop").html.bind($(".test-nested-loop"));
@@ -341,7 +342,7 @@ describe('Amadee Ozenfant', function () {
 		});
 		//console.log('Tmpl', tmpl);
 		assert.equal(root.find('li').length, 3);
-		
+		console.log('______');
 		var ntd = 'Netudykhata';
 		people[2].surname = ntd;
 		tmpl.set('companies[0]/people[2]', people[2]);
@@ -400,7 +401,7 @@ describe('Amadee Ozenfant', function () {
 			tmpl.set('display_list', true);
 			assert.equal($(".people > *:first-child ul > li").length, 3);
 			done();
-		}, 500);
+		}, 5);
 		///console.log('RES', tmpl.toHTML());
 	})
 	
