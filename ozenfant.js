@@ -66,6 +66,7 @@ var Ozenfant = function(str){
 		this.varname_pool = this.struct.varname_pool;
 		this.if_else_tree = this.struct.if_else_tree;
 		this.loop_pool = this.struct.loop_pool;
+		this.var_funcs = this.struct.var_funcs;
 		this.str = this.struct.str;
 	} else {
 		this.str = str;
@@ -82,6 +83,7 @@ var Ozenfant = function(str){
 		this.func = create_func(toFunc({children: this.struct.semantics}));
 		this.if_else_tree = {str_to_func: {}, var_funcs: {}};
 		this.loop_pool = {};
+		this.var_funcs = {};
 		this.get_vars({children: this.struct.semantics, root: true}
 			//, this.node_vars_paths
 			//, this.text_vars_paths
@@ -117,7 +119,7 @@ var create_func = (str, condition, loop_level) => {
 		var f = new Function(args, fbody);
 		return f;
 	} catch(e) {
-		console.error('Cannot create function');
+		console.error('Cannot create function', body);
 		return new Function('', '');
 	}
 }
@@ -129,6 +131,7 @@ Ozenfant.prepare = (str) => {
 	struct.text_vars_paths = {};
 	struct.nodes_vars = {};
 	struct.var_types = {};
+	struct.var_funcs = {};
 	struct.varname_pool = {
 		vars: {},
 		var_aliases: {},
@@ -167,7 +170,7 @@ var get_varname = (node) => {
 	return key;
 }
 
-var symb = '.';
+var symb = '_';
 
 var get_loop_varname = (loop_level, varname) => { 
 	var n = new Array(loop_level).join(symb) + varname;
@@ -190,8 +193,13 @@ var parse_loop_varname = varname => {
 
 var prefix = 'ololo@!@!#_';
 
-var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool) => {
+var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops, loop_pool, var_funcs) => {
 	var original_varname = varname;
+	var varfield;
+	if(varname.indexOf('.') !== -1){
+		varfield = varname.split('.');
+		varname = varfield[0];
+	}
 	if(varname_pool.vars[varname]){
             // already exists!
             //console.log('VAR', varname, 'already exists!');
@@ -201,6 +209,9 @@ var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops
             varname = new_name;
 	} else {
 		varname_pool.vars[varname] = true;
+	}
+	if(varfield){
+		var_funcs[varname] = varfield.slice(1).join('.');
 	}
 	var deps = if_else_deps.length ? ('(' + if_else_deps.join(') && (') + ')') : false;
 	if(deps){
@@ -392,7 +403,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					|| zild.type === 'NEW_ELSEIF'
 					|| zild.type === 'NEW_ELSE')){
 				if(zild.type === 'NEW_IF'){
-					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					resigtered_vars[varname] = true;
 					this.register_path(varname, new_path, node_pool, last_loop);
 					types[varname] = get_partial_func(node);
@@ -404,7 +415,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				if(zild.type === 'NEW_ELSEIF' || zild.type === 'NEW_ELSE'){
 					var varname = get_varname(zild);
 					if(!resigtered_vars[varname]){
-						register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+						register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					}
 					types[varname] = get_partial_func(node);
 					this.register_path(varname, new_path, node_pool, last_loop);
@@ -416,12 +427,12 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				this.get_vars(zild, new_path, types, if_else_deps, loops);
 			} else {
 				if(zild.varname !== undefined){
-					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					this.register_path(varname, new_path, node_pool, last_loop);
 				}
 				if(zild.attrStyleVars){
 					for(let [varname, attrname] of zild.attrStyleVars){
-						varname = register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+						varname = register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 						this.register_path(varname, new_path, node_pool, last_loop);
 						
 						const [real_name, params] = parse_attr_style_name(attrname);
@@ -447,7 +458,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					//console.log('str!', node.children[i].quoted_str);
 					zild.quoted_str.replace(text_var_regexp, (_, key) => {
 						var text_path = fix_path(path + '/text()[' + (Number(i) + 1 - text_lag) + ']');
-						varname = register_varname(key, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+						varname = register_varname(key, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 						if(!path_pool[text_path]){
 							path_pool[text_path] = zild.quoted_str;
 						}
@@ -457,7 +468,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				} 
 				var new_loops = [...loops];
 				if(zild.loop){
-					let loopname = register_varname(zild.loop, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool);
+					let loopname = register_varname(zild.loop, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					var loop = register_loop(loopname, loops.length, this.loop_pool, last_loop);
 					this.register_path(loopname, new_path, node_pool, last_loop);
 					types[loopname] = {
@@ -499,8 +510,7 @@ var toFuncVarname = (a) => {
 		var varname = name.length ? '.' + name : '';
 		a = '__loopvar' + level + varname ;
 	} else {
-		a = a.length ? "['" + a + "']" : '';
-		a = 'ctx' + a;
+		a = "ctx['" + a.split(".").join("']['") + "']";
 	}
 	return a;
 }
@@ -804,6 +814,13 @@ Ozenfant.prototype._setVarVal = function(key, val, binding){
 				// this var is in inactive block
 				return;
 			}
+		}
+	}
+	if(this.var_funcs[key]){
+		if(this.var_funcs[key] instanceof Function){
+			val = this.var_funcs[key](val);
+		} else {
+			val = val[this.var_funcs[key]];
 		}
 	}
 	if(val instanceof Object) return;

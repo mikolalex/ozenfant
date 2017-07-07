@@ -326,7 +326,7 @@ module.exports = {
 							if(!loopvn){
 								throw new Error('Ozenfant: Wrong loop var name: ' + child.chars + ', should match /\{\$([^\}]*)\}/');
 							}
-							res.loop = loopvn[1];
+								res.loop = loopvn[1];
 							//console.log('INDEX', res.level);
 						break;
 						case 'bracket':

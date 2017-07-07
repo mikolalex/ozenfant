@@ -90,6 +90,7 @@ var exp_struct = {
 	}]
 }
 
+//*
 
 describe('Amadee Ozenfant', function () {
 	var do_in_tree = (node, cb, child_key = 'children') => {
@@ -249,26 +250,26 @@ describe('Amadee Ozenfant', function () {
 		tmpl.set('isOpened', true);
 		assert.equal(true, has($(".test-nested-if").html(), 'class="close"'));
 	})
-	it('testing nested loops', (done) => {
+	it('testing nested loops', (done) => { // */
 		var tmpl = Ozenfant.prepare(`
 		.{$companies}
 			.
-				h1.$.title
+				h1.$_title
 				.
 					? $display_people
-						ul.people{$.people}
+						ul.people{$_people}
 							li
-								.name$..name
-								.surname$..surname
-								.company$.company
+								.name$__name
+								.surname$__surname
+								.company$_company
 								.relatives
 									? !$display_list
-										.company$.title
-										select{$..relatives}
-											option.$...name(value: $...type, data-name: $..name)
+										.company$_title
+										select{$__relatives}
+											option.$___name(value: $___type, data-name: $__name)
 									:
-										ul{$..relatives}
-											li.$...name(data-value: $...type, data-name: $..name)
+										ul{$__relatives}
+											li.$___name(data-value: $___type, data-name: $__name)
 					:
 						a.display-people
 							"Display people"
@@ -276,7 +277,6 @@ describe('Amadee Ozenfant', function () {
 		
 		`);
 		tmpl = new Ozenfant(tmpl);
-		console.log('Tmpl', tmpl);
 		var root = $(".test-nested-loop");
 		var rnode = root.get(0);
 		var get_html = $(".test-nested-loop").html.bind($(".test-nested-loop"));
@@ -342,7 +342,6 @@ describe('Amadee Ozenfant', function () {
 		});
 		//console.log('Tmpl', tmpl);
 		assert.equal(root.find('li').length, 3);
-		console.log('______');
 		var ntd = 'Netudykhata';
 		people[2].surname = ntd;
 		tmpl.set('companies[0]/people[2]', people[2]);
@@ -352,7 +351,6 @@ describe('Amadee Ozenfant', function () {
 		people.pop();
 		tmpl.set('companies[0]/people', people);
 		assert.equal(root.find('li').length, 2);
-		
 		
 		people.push({
 			name: 'Katherine',
@@ -396,13 +394,38 @@ describe('Amadee Ozenfant', function () {
 		const comp3 = 'RSTSh';
 		tmpl.set('companies[0]/company', comp3);
 		assert.equal($(".people .company").html(), comp3);
-		
 		setTimeout(() => {
 			tmpl.set('display_list', true);
 			assert.equal($(".people > *:first-child ul > li").length, 3);
 			done();
 		}, 5);
-		///console.log('RES', tmpl.toHTML());
+		
+		///console.log('RES', tmpl.toHTML());*/
+	})
+	
+	it('testing var fields', () => {
+		var tmpl = Ozenfant.prepare(`
+			.
+				h4 
+					"User"
+				.$user.name
+				.$user.surname
+								
+		
+		`);
+		tmpl = new Ozenfant(tmpl);
+		var rnode = document.querySelector(".test-var-fields");
+		tmpl.render(rnode, {
+			user: {
+				name: 'Mykola',
+				surname: 'Oleksiienko'
+			}
+		});
+		console.log('______', tmpl);
+		tmpl.set('user', {
+			name: 'Grytsko',
+			surname: 'Dughelnyi',
+		});
 	})
 	
 	it('testing syntax terror 1', () => {
@@ -424,7 +447,6 @@ describe('Amadee Ozenfant', function () {
 						.c
 					.e
 				`);
-				console.log('Tmpl', tmpl.toHTML());
 			}
 			assert.throws(create_tmpl, Error, "Cannot parse template");
 	})
