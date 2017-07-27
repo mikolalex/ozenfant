@@ -223,71 +223,81 @@ module.exports = {
 	},
 	semantics: {
 		root_token: {
-			func: (struct, parser) => {
-
-				var res = {children: []};
-				var last_of_level = {
-					"-1": res,
-				}
-				var che_results = parser(struct.children);
-				//console.log('Results', che_results);
-				var max_level = 0;
-				var last_if = [];
-				for(let i in che_results){
-					let child = che_results[i];
-					if(!child.tagname && !child.classnames && !child.quoted_str && !child.variable && !child.type) {
-						continue;
+			func: (function(){ 
+				var nestedComponentCount = 0;
+				return (struct, parser) => {
+					var res = {children: []};
+					var last_of_level = {
+						"-1": res,
 					}
-					if(child.type === 'IF'){
-						last_if.push(child);
-					}
-					if(child.type === 'ELSE'){
-						var lif = last_if.pop();
-						lif.else_children = child;
-					}
-					var lvl = child.level || 0;
-					if(lvl > max_level){
-						max_level = lvl;
-					}
-					var put_to = lvl - 1;
-					child.children = [];
-					if(!last_of_level[put_to]){
-						for(;put_to--;put_to > -2){
-							if(last_of_level[put_to]) break;
+					var che_results = parser(struct.children);
+					//console.log('Results', che_results);
+					var max_level = 0;
+					var last_if = [];
+					for(let i in che_results){
+						let child = che_results[i];
+						if(child.tagname && (child.tagname.slice(0, 1).toLowerCase() !== child.tagname.slice(0, 1))){
+							child.component = {
+								name: child.tagname
+							};
+							child.varname = '@nestedComponent' + (++nestedComponentCount);
+							child.tagname = 'div';
 						}
-						if(!last_of_level[put_to]){
+						if(!child.tagname && !child.classnames && !child.quoted_str && !child.variable && !child.type) {
 							continue;
 						}
-					}
-					// way back
-					for(var y = i; y >= 0; y--){
-						if(che_results[y].level < lvl){
-							//console.log('PUT TO', che_results[y], che_results[y].level);
-							break;
+						if(child.type === 'IF'){
+							last_if.push(child);
+						}
+						if(child.type === 'ELSE'){
+							var lif = last_if.pop();
+							lif.else_children = child;
+						}
+						var lvl = child.level || 0;
+						if(lvl > max_level){
+							max_level = lvl;
+						}
+						var put_to = lvl - 1;
+						child.children = [];
+						if(!last_of_level[put_to]){
+							for(;put_to--;put_to > -2){
+								if(last_of_level[put_to]) break;
+							}
+							if(!last_of_level[put_to]){
+								continue;
+							}
+						}
+						// way back
+						for(var y = i; y >= 0; y--){
+							if(che_results[y].level < lvl){
+								//console.log('PUT TO', che_results[y], che_results[y].level);
+								break;
+							}
+						}
+						var parent1 = last_of_level[put_to];
+						var parent2 = che_results[y];
+						if(!che_results[y]){
+							parent2 = res;
+						}
+						if(parent1 !== parent2){
+							//console.log('o-ow', parent1, parent2, child);
+						}
+						parent2.children.push(child);
+						console.log('Got child', child);
+						last_of_level[lvl] = child;
+						if(lvl + 1 < max_level){
+							//console.log('lvl', lvl+1, max_level);
+							var j = lvl + 1;
+							for(var j = lvl + 1;j <= max_level;j++){
+								if(!last_of_level[j]) break;
+								//console.log('delete', last_of_level[j]);
+								delete last_of_level[j];
+							}
 						}
 					}
-					var parent1 = last_of_level[put_to];
-					var parent2 = che_results[y];
-					if(!che_results[y]){
-						parent2 = res;
-					}
-					if(parent1 !== parent2){
-						//console.log('o-ow', parent1, parent2, child);
-					}
-					parent2.children.push(child);
-					last_of_level[lvl] = child;
-					if(lvl + 1 < max_level){
-						//console.log('lvl', lvl+1, max_level);
-						var j = lvl + 1;
-						for(var j = lvl + 1;j <= max_level;j++){
-							if(!last_of_level[j]) break;
-							//console.log('delete', last_of_level[j]);
-							delete last_of_level[j];
-						}
-					}
+					return res.children;
 				}
-				return res.children;
-			}
+			})()
 		},
 		item: {
 			func: (struct, parser) => {
