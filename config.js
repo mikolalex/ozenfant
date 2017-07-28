@@ -283,7 +283,6 @@ module.exports = {
 							//console.log('o-ow', parent1, parent2, child);
 						}
 						parent2.children.push(child);
-						console.log('Got child', child);
 						last_of_level[lvl] = child;
 						if(lvl + 1 < max_level){
 							//console.log('lvl', lvl+1, max_level);
