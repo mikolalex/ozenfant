@@ -141,6 +141,7 @@ describe('Amadee Ozenfant', function () {
 		
 		tmpl.set('login', 'Ed1do');
 		tmpl.set('year', '2011');
+		console.log('tmpl', tmpl);
 		
 		assert.equal($(".test-variables .login").html(), 'Ed1do');
 		assert.equal($.trim($(".test-variables footer").html()), 'Some info. Copyright (c) 2011');

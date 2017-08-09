@@ -172,6 +172,8 @@ Ozenfant.prepare = (str) => {
 	return struct;
 }
 
+var LOOP_CHAR = '.';
+
 var get_varname = (node) => {
 	var key = node.varname;
 	if(!key.length){
@@ -519,7 +521,7 @@ var getvar = (key) => {
 	return "' + (ctx['" + key + "'] || '') + '";
 }
 var getvar_raw = (key) => {
-	return "' + (" + key + " || '') + '";
+	return "' + ((" + key + " !== undefined) ? " + key + " : '') + '";
 }
 
 var get_children_html = (childs, parent_tag, if_stack, pp, loop_level) => {
@@ -852,7 +854,7 @@ Ozenfant.prototype._setVarVal = function(key, val, binding){
 		}
 	}
 	if(val instanceof Object) return;
-	binding.textContent = val;
+	binding.innerHTML = val;
 }
 Ozenfant.prototype._setValByPath = function(path, val, root_node){
 	document.evaluate(path, root_node, null, XPathResult.ANY_TYPE, null).iterateNext().innerHTML = val;
@@ -1018,7 +1020,11 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 			return this.state[key];
 		});
 		this._setVarVal(key, new_str, binding);
-		binding.innerHTML = new_str;
+		if(binding.nodeType === Node.TEXT_NODE){
+			binding.textContent = new_str;
+		} else {
+			binding.innerHTML = new_str;
+		}
 	} else {
 		if(this.var_types[key]){
 			switch(this.var_types[key].type){
