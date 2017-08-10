@@ -580,8 +580,14 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 		switch(node.type){
 			case 'NEW_IF':
 				//console.log('IF STACK', if_stack);
-				if_stack[node.level] = [toFuncVarname(node.varname), node.expr, [], node.varname];
-				res1.push(indent + "'); if(" + node.expr + ") { res.push('");
+				var tfv = toFuncVarname(node.varname);
+				if_stack[node.level] = [tfv, node.expr, [], node.varname];
+				var new_expr = node.expr;
+				if(parse_loop_varname(node.varname).name !== node.varname){
+					// it's loop varname
+					new_expr = node.expr.replace(new RegExp('ctx\.' + node.varname, 'g'), tfv);
+				}
+				res1.push(indent + "'); if(" + new_expr + ") { res.push('");
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(`'); }
