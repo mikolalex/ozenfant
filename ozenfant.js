@@ -434,6 +434,7 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					resigtered_vars[varname] = true;
 					this.register_path(varname, new_path, node_pool, last_loop);
+					console.log('set to types')
 					types[varname] = get_partial_func(node);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.expr);
@@ -583,12 +584,12 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 			case 'NEW_IF':
 				//console.log('IF STACK', if_stack);
 				var tfv = toFuncVarname(node.varname);
-				if_stack[node.level] = [tfv, node.expr, [], node.varname];
 				var new_expr = node.expr;
 				if(parse_loop_varname(node.varname).name !== node.varname){
 					// it's loop varname
 					new_expr = node.expr.replace(new RegExp('ctx\.' + node.varname, 'g'), tfv);
 				}
+				if_stack[node.level] = [tfv, new_expr, [], node.varname];
 				res1.push(indent + "'); if(" + new_expr + ") { res.push('");
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
@@ -597,9 +598,14 @@ res.push('`);
 			break;
 			case 'NEW_ELSEIF':
 				var [varname, expr, elifs] = if_stack[node.level];
-				if_stack[node.level][2].push(node.expr);
-				node.real_expr = node.expr + " && !(" + expr + ")";
-				res1.push(indent + "'); if(" + node.expr + " && !(" + expr + ")) { res.push('");
+				var new_expr = node.expr;
+				if(parse_loop_varname(node.varname).name !== node.varname){
+					// it's loop varname
+					new_expr = node.expr.replace(new RegExp('ctx\.' + node.varname, 'g'), tfv);
+				}
+				if_stack[node.level][2].push(new_expr);
+				node.real_expr = new_expr + " && !(" + expr + ")";
+				res1.push(indent + "'); if(" + new_expr + " && !(" + expr + ")) { res.push('");
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(indent + `'); }
@@ -822,6 +828,7 @@ Ozenfant.prototype.isVisible = function(varname){
 Ozenfant.prototype.searchForComponentBindings = function(var_paths, binding){
 	for(let varname in var_paths){
 		if(!this.component_to_vars[varname]) continue;
+		console.log('shoud update', varname, binding);
 	}
 }
 
@@ -1042,6 +1049,7 @@ Ozenfant.prototype.rec_set = function(el, parent_loop, path, val, context, old_v
 }
 
 Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_context) {
+	var lc = loop_context;
 	if(this.nodes_vars[this.text_vars_paths[key]]){
 		var template = this.nodes_vars[this.text_vars_paths[key]];
 		//console.log('template!', template);
@@ -1080,7 +1088,8 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 					}
 					var ctx = [this.state];
 					if(loop){
-						ctx = [this.state, ...loop_context];
+						let lc = loop_context || [{}];
+						ctx = [this.state, ...lc];
 					}
 					var html = func.apply(null, ctx);
 					binding.innerHTML = html;
