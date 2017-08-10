@@ -101,6 +101,7 @@ var Ozenfant = function(str){
 			//, this.loop_pool	
 		);
 	}
+	this.component_to_vars = this.component_to_vars || {};
 	this.state = {};
 	this.bindings = {};
 	this.iod = parse_if_else_dependencies(this.selection_points);
@@ -401,6 +402,12 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 		var resigtered_vars = {};
 		for(var i in node.children){
 			var zild = node.children[i];
+			if(zild.component){
+				if(!this.component_to_vars){
+					this.component_to_vars = {};
+				}
+				this.component_to_vars[zild.varname] = zild.component;
+			}
 			var new_path = path;
 			if(!is_new_if(zild)){
 				if(!zild.tagname && !zild.classnames){
@@ -575,8 +582,14 @@ var toFunc = function(node, parent_tag, if_stack = {}, partial_pool = false, loo
 		switch(node.type){
 			case 'NEW_IF':
 				//console.log('IF STACK', if_stack);
-				if_stack[node.level] = [toFuncVarname(node.varname), node.expr, [], node.varname];
-				res1.push(indent + "'); if(" + node.expr + ") { res.push('");
+				var tfv = toFuncVarname(node.varname);
+				if_stack[node.level] = [tfv, node.expr, [], node.varname];
+				var new_expr = node.expr;
+				if(parse_loop_varname(node.varname).name !== node.varname){
+					// it's loop varname
+					new_expr = node.expr.replace(new RegExp('ctx\.' + node.varname, 'g'), tfv);
+				}
+				res1.push(indent + "'); if(" + new_expr + ") { res.push('");
 				childs_html = get_children_html(childs, parent_tag, if_stack, pp, loop_level);
 				res1.push(childs_html);
 				res1.push(`'); }
@@ -768,6 +781,7 @@ Ozenfant.prototype.getIfElseVarsIndex = function(){
 
 Ozenfant.prototype.updateBindings = function(){
 	this.bindings = {};
+	this.components = {};
 	for(let varname in this.node_vars_paths){
 		if(this.if_else_vars[varname]){
 			var breaker = false;
@@ -795,8 +809,22 @@ Ozenfant.prototype.updateBindings = function(){
 			console.warn('No node found for path:', this.text_vars_paths[varname], 'in context', this.root);
 		}
 	}
-	console.log('upB', this.bindings);
+	for(let vn in this.bindings){
+		if(this.component_to_vars[vn]){
+			this.components[vn] = this.bindings[vn];
+		}
+	}
 }
+
+Ozenfant.prototype.isVisible = function(varname){
+}
+
+Ozenfant.prototype.searchForComponentBindings = function(var_paths, binding){
+	for(let varname in var_paths){
+		if(!this.component_to_vars[varname]) continue;
+	}
+}
+
 Ozenfant.prototype.render = function(node, context = false){
 	if(context){
 		this.state = JSON.parse(JSON.stringify(context));
@@ -900,6 +928,7 @@ Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding
 	}
 	// !!! should be rewritten!
 	binding.insertAdjacentHTML("beforeend", res.join(''));
+	this.searchForComponentBindings(this.loop_pool[loop].paths, binding);
 }
 
 Ozenfant.prototype.setLoop = function(loopname, val, old_val, binding, parent_context){
