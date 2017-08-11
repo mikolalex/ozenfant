@@ -232,11 +232,12 @@ var register_varname = (varname, varname_pool, if_else_deps, if_else_tree, loops
 	}
 	var deps = if_else_deps.length ? ('(' + if_else_deps.join(') && (') + ')') : false;
 	if(deps){
-		if(if_else_tree.str_to_func[deps]){
-			if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps];
-		} else {
-			if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps] = new Function('ctx', 'return ' + deps);
-		}
+		if(!if_else_tree.str_to_func[deps]){
+			var args = loops.map((l, i) => '__loopvar' + (1 + i));
+			args.unshift('ctx');
+			if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps] = new Function(args.join(', '), 'return ' + deps);
+		} 
+		if_else_tree.var_funcs[varname] = if_else_tree.str_to_func[deps];
 	}
 	if(loops.length){
 		var last_loop = loop_pool[loops[loops.length - 1]];
@@ -434,10 +435,10 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					resigtered_vars[varname] = true;
 					this.register_path(varname, new_path, node_pool, last_loop);
-					console.log('set to types')
 					types[varname] = get_partial_func(node);
 					var my_if_else_deps = [...if_else_deps];
-					my_if_else_deps.push(zild.expr);
+					var expr = get_expr(zild.expr, loops);
+					my_if_else_deps.push(expr);
 					selp.deps = my_if_else_deps;
 					selp.parent_selp = parent_selp;
 					parent_selp.child_deps.push(selp.id);
@@ -1108,6 +1109,19 @@ Ozenfant.prototype.updateAnyway = function(key){
 		&& special_html_setters[this.var_types[key].name].updateAnyway;
 }
 
+var get_expr = (expr, loops) => {
+	var vars = expr.replace(/ctx\.\S*/, str => {
+		str = str.replace('ctx.', '');
+		var {name, level} = parse_loop_varname(str);
+		if(level){
+			return '__loopvar' + level + '.' + name;
+		} else {
+			return 'ctx.' + name;
+		}
+	})
+	return vars;
+}
+
 Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force, loop_context){
 	var binding;
 	if(key.indexOf('/') !== -1){
@@ -1169,7 +1183,8 @@ Ozenfant.prototype.set = function(key, val, loop, loop_binding, old_data, force,
 	//console.log('path', this.text_vars_paths[key], 'vars', this.nodes_vars);
 	if(this.if_else_tree.var_funcs[key]){
 		//console.log('should check the func first!', key);
-		if(!this.if_else_tree.var_funcs[key](this.state)){
+		var lc = loop_context || [{}];
+		if(!this.if_else_tree.var_funcs[key].call(null, this.state, ...lc)){
 			// no need to update anything in DOM - it's not an active branch
 			return;
 		}
