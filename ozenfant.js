@@ -85,7 +85,7 @@ var Ozenfant = function(str){
 		this.loop_pool = {};
 		this.var_funcs = {};
 		this.ied = {};
-		this.selection_points = [{children: [], child_deps: []}];
+		this.selection_points = [{children: [], child_deps: [], components: {}}];
 		this.get_vars({children: this.struct.semantics, root: true}
 			//, this.node_vars_paths
 			//, this.text_vars_paths
@@ -408,6 +408,8 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					this.component_to_vars = {};
 				}
 				this.component_to_vars[zild.varname] = zild.component;
+				parent_selp && (parent_selp.components[zild.varname] = true);
+				
 			}
 			var new_path = path;
 			if(!is_new_if(zild)){
@@ -429,13 +431,18 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				var selp = {
 					children: []
 					, child_deps: []
+					, components: {}
 				};
 				selp.id = this.selection_points.push(selp) - 1;
 				if(zild.type === 'NEW_IF'){
 					var varname = register_varname(get_varname(zild), this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					resigtered_vars[varname] = true;
 					this.register_path(varname, new_path, node_pool, last_loop);
-					types[varname] = get_partial_func(node);
+					types[varname] = {
+						type: zild.type,
+						func: get_partial_func(node),
+						selp
+					}
 					var my_if_else_deps = [...if_else_deps];
 					var expr = get_expr(zild.expr, loops);
 					my_if_else_deps.push(expr);
@@ -450,7 +457,11 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 					if(!resigtered_vars[varname]){
 						register_varname(varname, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					}
-					types[varname] = get_partial_func(node);
+					types[varname] = {
+						type: zild.type,
+						func: get_partial_func(node),
+						selp
+					}
 					this.register_path(varname, new_path, node_pool, last_loop);
 					var my_if_else_deps = [...if_else_deps];
 					my_if_else_deps.push(zild.real_expr)
@@ -505,8 +516,19 @@ Ozenfant.prototype.get_vars = function(node, path, types, if_else_deps, loops, p
 				} 
 				var new_loops = [...loops];
 				if(zild.loop){
+					var selp = {
+						children: []
+						, child_deps: []
+						, components: {}
+					};
+					selp.id = this.selection_points.push(selp) - 1;
+					selp.deps = if_else_deps;
+					selp.parent_selp = parent_selp;
+					parent_selp.child_deps.push(selp.id);
+					parent_selp = selp;
 					let loopname = register_varname(zild.loop, this.varname_pool, if_else_deps, this.if_else_tree, loops, this.loop_pool, this.var_funcs);
 					var loop = register_loop(loopname, loops.length, this.loop_pool, last_loop);
+					loop.selp = selp;
 					this.register_path(loopname, new_path, node_pool, last_loop);
 					types[loopname] = {
 						type: 'LOOP',
@@ -769,7 +791,7 @@ Ozenfant.prototype.searchByPath = function(path){
 Ozenfant.prototype.getIfElseVarsIndex = function(){
 	this.if_else_vars = {};
 	for(var one in this.var_types){
-		if(!(this.var_types[one] instanceof Object)) continue;
+		if(!(this.var_types[one] instanceof Object) || !this.var_types[one].if_pool) continue;
 		for(var varname in this.var_types[one].if_pool){
 			var path = this.var_types[one].if_pool[varname];
 			init_if_empty(this.if_else_vars, varname, {}, one, true);
@@ -931,6 +953,7 @@ Ozenfant.prototype.addLoopItems = function(loop, from, to, val, old_val, binding
 		old_val[i] = val[i];
 		if(val[i]){
 			var ht = func.apply(null, context.concat(val[i]));
+			console.log('generated html', this.loop_pool[loop].selp);
 			res.push(ht);
 		}
 	}
@@ -1079,13 +1102,15 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 					const ct = loop_context || [this.state];
 					this.setLoop(key, val, old_val, binding, ct);
 				break;
-				default:
+				case 'NEW_IF':
+				case 'NEW_ELSE':
+				case 'NEW_ELSEIF':
 					var func;
-					if(this.var_types[key] === 'USE_ROOT_FUNC'){
+					if(this.var_types[key].func === 'USE_ROOT_FUNC'){
 						func = this.struct.func;
 					}
-					if(this.var_types[key] instanceof Function){
-						func = this.var_types[key];
+					if(this.var_types[key].func instanceof Function){
+						func = this.var_types[key].func;
 					}
 					var ctx = [this.state];
 					if(loop){
@@ -1093,6 +1118,7 @@ Ozenfant.prototype.__set = function(key, val, old_val, binding, loop, loop_conte
 						ctx = [this.state, ...lc];
 					}
 					var html = func.apply(null, ctx);
+					console.log('generated html 2', this.var_types[key].selp);
 					binding.innerHTML = html;
 					this.updateBindings();
 				break;
